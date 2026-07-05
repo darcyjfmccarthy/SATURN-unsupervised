@@ -1,0 +1,6 @@
+*.h5ad
+*.pt
+**/__pycache__/**
+*.pyc
+*.pkl
+out/**

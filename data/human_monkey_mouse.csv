@@ -1,0 +1,4 @@
+species,path,embedding_path,in_label_col
+h_sapiens,data/cell_atlases/h_sapiens.h5ad,data/gene_embeddings/esmc600_embeddings_summaries_cpu/h_sapiens_gene_all_esmc600.pt,cellType
+m_musculus,data/cell_atlases/m_musculus.h5ad,data/gene_embeddings/esmc600_embeddings_summaries_cpu/m_musculus_gene_all_esmc600.pt,cellType
+m_murinus,data/cell_atlases/m_murinus.h5ad,data/gene_embeddings/esmc600_embeddings_summaries_cpu/m_murinus_gene_all_esmc600.pt,cellType

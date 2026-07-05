@@ -1,0 +1,5 @@
+species,path,embedding_path,in_label_col
+a_queenslandica,data/cell_atlases/a_queenslandica.h5ad,data/gene_embeddings/esmc600_embeddings_summaries_cpu/a_queenslandica_gene_all_esmc600.pt,cellType
+c_elegans,data/cell_atlases/c_elegans.h5ad,data/gene_embeddings/esmc600_embeddings_summaries_cpu/c_elegans_gene_all_esmc600.pt,cellType
+c_gigas,data/cell_atlases/c_gigas.h5ad,data/gene_embeddings/esmc600_embeddings_summaries_cpu/c_gigas_gene_all_esmc600.pt,cellType
+c_hemisphaerica,data/cell_atlases/c_hemisphaerica.h5ad,data/gene_embeddings/esmc600_embeddings_summaries_cpu/c_hemisphaerica_gene_all_esmc600.pt,cellType

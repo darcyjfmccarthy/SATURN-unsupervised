@@ -175,6 +175,57 @@ def multi_species_collate_fn(batch: List[Tuple[torch.FloatTensor, torch.LongTens
     return batch_dict #{species:[data, label, ref_label, batch_label]}
 
 
+class ExperimentDatasetMultiLabelFree(data.Dataset):
+    """Multi-species dataset for fine-tuning that cannot expose cell labels."""
+
+    def __init__(self, all_data: dict) -> None:
+        super().__init__()
+        self.xs = {}
+        self.num_cells = {}
+        self.species = sorted(all_data)
+        self.offsets = {}
+
+        offset = 0
+        for species in self.species:
+            values = all_data[species]
+            X = values.detach().clone().float() if torch.is_tensor(values) else data_to_torch_X(values)
+            self.xs[species] = X
+            self.num_cells[species] = X.shape[0]
+            self.offsets[species] = offset
+            offset += X.shape[0]
+        self.total_num_cells = offset
+
+    def __getitem__(self, idx):
+        if not isinstance(idx, int):
+            raise NotImplementedError
+        original_idx = idx
+        for species in self.species:
+            if idx < self.num_cells[species]:
+                return self.xs[species][idx], species, original_idx
+            idx -= self.num_cells[species]
+        raise IndexError
+
+    def __len__(self) -> int:
+        return self.total_num_cells
+
+
+def label_free_multi_species_collate_fn(batch):
+    """Collate label-free examples by species without fabricating label tensors."""
+    species_to_data = defaultdict(list)
+    species_to_indices = defaultdict(list)
+    for cell_data, species, global_idx in batch:
+        species_to_data[species].append(cell_data)
+        species_to_indices[species].append(global_idx)
+
+    return {
+        species: (
+            torch.stack(species_to_data[species]),
+            torch.tensor(species_to_indices[species], dtype=torch.long),
+        )
+        for species in sorted(species_to_data)
+    }
+
+
 
 # Deprecated (don't use this)
 class ExperimentDatasetMultiEqualCT(data.Dataset):

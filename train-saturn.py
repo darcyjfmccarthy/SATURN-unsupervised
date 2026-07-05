@@ -26,9 +26,11 @@ import torch.optim as optim
 import numpy as np
 import utils.logging_presets as logging_presets
 import record_keeper
+from utils import loss_and_miner_utils as lmu
 from data.gene_embeddings import load_gene_embeddings_adata
 from data.multi_species_data import ExperimentDatasetMulti, multi_species_collate_fn, ExperimentDatasetMultiEqualCT
 from data.multi_species_data import ExperimentDatasetMultiEqual
+from data.multi_species_data import ExperimentDatasetMultiLabelFree, label_free_multi_species_collate_fn
 
 from model.saturn_model import SATURNPretrainModel, SATURNMetricModel, make_centroids
 import torch.nn.functional as F
@@ -39,6 +41,9 @@ import argparse
 from datetime import datetime
 from pathlib import Path
 import sys
+import hashlib
+import json
+import math
 sys.path.append('../')
 
 # SATURN
@@ -49,11 +54,132 @@ from copy import deepcopy
 from score_adata import get_all_scores
 from utils import stop_conditions
 import random
+from label_free_utils import (
+    SpeciesDiscriminator,
+    balanced_species_cross_entropy,
+    embed_label_free_dataset,
+    frozen_neighbor_attraction_loss,
+    frozen_topology_loss,
+    multi_species_mmd,
+    online_cross_species_mnn_loss,
+    partial_ot_alignment_loss,
+)
+from phase2_utils import PHASE2_OBJECTIVES
+from phase2_train import run_phase2_finetuning
+
+
+def str2bool(value):
+    if isinstance(value, bool):
+        return value
+    value = value.lower()
+    if value in ("yes", "true", "t", "1", "y"):
+        return True
+    if value in ("no", "false", "f", "0", "n"):
+        return False
+    raise argparse.ArgumentTypeError(f"Boolean value expected, got {value}")
+
+
+def triplet_geometry_summary(embeddings, indices_tuple, distance, labels=None, ref_labels=None):
+    anchor_idx, positive_idx, negative_idx = indices_tuple
+    count = len(anchor_idx)
+    summary = {
+        "count": count,
+        "ap_sim_sum": 0.0,
+        "an_sim_sum": 0.0,
+        "margin_sum": 0.0,
+        "ap_label_match_sum": 0.0,
+        "an_label_match_sum": 0.0,
+        "ap_ref_match_sum": 0.0,
+        "an_ref_match_sum": 0.0,
+    }
+    if count == 0:
+        return summary
+
+    with torch.no_grad():
+        ap_sim = distance.pairwise_distance(embeddings[anchor_idx], embeddings[positive_idx])
+        an_sim = distance.pairwise_distance(embeddings[anchor_idx], embeddings[negative_idx])
+        margin = ap_sim - an_sim if distance.is_inverted else an_sim - ap_sim
+
+        summary["ap_sim_sum"] = float(torch.sum(ap_sim).detach().cpu())
+        summary["an_sim_sum"] = float(torch.sum(an_sim).detach().cpu())
+        summary["margin_sum"] = float(torch.sum(margin).detach().cpu())
+
+        if labels is not None:
+            summary["ap_label_match_sum"] = float(torch.sum((labels[anchor_idx] == labels[positive_idx]).float()).detach().cpu())
+            summary["an_label_match_sum"] = float(torch.sum((labels[anchor_idx] == labels[negative_idx]).float()).detach().cpu())
+        if ref_labels is not None:
+            summary["ap_ref_match_sum"] = float(torch.sum((ref_labels[anchor_idx] == ref_labels[positive_idx]).float()).detach().cpu())
+            summary["an_ref_match_sum"] = float(torch.sum((ref_labels[anchor_idx] == ref_labels[negative_idx]).float()).detach().cpu())
+
+    return summary
+
+
+def reducer_active_triplets(loss_func):
+    return int(getattr(loss_func.reducer, "triplets_above_low", getattr(loss_func.reducer, "triplets_past_filter", 0)))
+
+
+def add_triplet_summary(accumulator, summary, active_triplets):
+    accumulator["count"] += summary["count"]
+    accumulator["active"] += active_triplets
+    for key in [
+        "ap_sim_sum",
+        "an_sim_sum",
+        "margin_sum",
+        "ap_label_match_sum",
+        "an_label_match_sum",
+        "ap_ref_match_sum",
+        "an_ref_match_sum",
+    ]:
+        accumulator[key] += summary[key]
+
+
+def finalize_triplet_summary(prefix, accumulator):
+    count = accumulator["count"]
+    if count == 0:
+        return {
+            f"{prefix}_active_triplets": 0,
+            f"{prefix}_active_triplet_fraction": 0.0,
+            f"{prefix}_ap_sim": np.nan,
+            f"{prefix}_an_sim": np.nan,
+            f"{prefix}_margin": np.nan,
+            f"{prefix}_ap_label_match_fraction": np.nan,
+            f"{prefix}_an_label_match_fraction": np.nan,
+            f"{prefix}_ap_ref_match_fraction": np.nan,
+            f"{prefix}_an_ref_match_fraction": np.nan,
+        }
+    return {
+        f"{prefix}_active_triplets": accumulator["active"],
+        f"{prefix}_active_triplet_fraction": accumulator["active"] / count,
+        f"{prefix}_ap_sim": accumulator["ap_sim_sum"] / count,
+        f"{prefix}_an_sim": accumulator["an_sim_sum"] / count,
+        f"{prefix}_margin": accumulator["margin_sum"] / count,
+        f"{prefix}_ap_label_match_fraction": accumulator["ap_label_match_sum"] / count,
+        f"{prefix}_an_label_match_fraction": accumulator["an_label_match_sum"] / count,
+        f"{prefix}_ap_ref_match_fraction": accumulator["ap_ref_match_sum"] / count,
+        f"{prefix}_an_ref_match_fraction": accumulator["an_ref_match_sum"] / count,
+    }
+
+
+def new_triplet_summary_accumulator():
+    return {
+        "count": 0,
+        "active": 0,
+        "ap_sim_sum": 0.0,
+        "an_sim_sum": 0.0,
+        "margin_sum": 0.0,
+        "ap_label_match_sum": 0.0,
+        "an_label_match_sum": 0.0,
+        "ap_ref_match_sum": 0.0,
+        "an_ref_match_sum": 0.0,
+    }
 
 
 def train(model, loss_func, mining_func, device,
                 train_loader, optimizer, epoch, mnn, 
-          sorted_species_names, use_ref_labels=False, indices_counts={}, equalize_triplets_species=False):
+          sorted_species_names, use_ref_labels=False, indices_counts={}, equalize_triplets_species=False,
+          local_loss_func=None, local_mining_func=None, local_triplet_weight=0.0,
+          divergence_teacher_model=None, divergence_weight=0.0,
+          divergence_temperature=0.1, divergence_scope="same_species"):
     '''
     Train one epoch for a SATURN model with Metric Learning
     
@@ -74,9 +200,23 @@ def train(model, loss_func, mining_func, device,
     
     model.train()
     torch.autograd.set_detect_anomaly(True)
+    epoch_losses = []
+    epoch_cross_losses = []
+    epoch_local_losses = []
+    epoch_divergence_losses = []
+    epoch_weighted_divergence_losses = []
+    epoch_candidate_counts = []
+    epoch_triplet_counts = []
+    epoch_local_candidate_counts = []
+    epoch_local_triplet_counts = []
+    epoch_divergence_rows = []
+    epoch_divergence_pairs = []
+    cross_triplet_summary = new_triplet_summary_accumulator()
+    local_triplet_summary = new_triplet_summary_accumulator()
     for batch_idx, batch_dict in enumerate(train_loader):
         optimizer.zero_grad()
         embs = []
+        teacher_embs = []
         labs = []
         spec = []
         ref_labs = []
@@ -88,11 +228,17 @@ def train(model, loss_func, mining_func, device,
             embeddings = model(data, species)
             embeddings = F.normalize(embeddings)
             embs.append(embeddings)
+            if divergence_weight > 0 and divergence_teacher_model is not None:
+                with torch.no_grad():
+                    teacher_embeddings = divergence_teacher_model(data, species)
+                    teacher_embeddings = F.normalize(teacher_embeddings)
+                    teacher_embs.append(teacher_embeddings)
             labs.append(labels)
             ref_labs.append(ref_labels)
             spec.append(np.argmax(np.array(sorted_species_names) == species) * torch.ones_like(labels))
             
         embeddings = torch.cat(embs)
+        teacher_embeddings = torch.cat(teacher_embs) if teacher_embs else None
         labels = torch.cat(labs)
         ref_labels = torch.cat(ref_labs)
         
@@ -107,7 +253,49 @@ def train(model, loss_func, mining_func, device,
         for j in range(len(indices_mapped[0])):
             key = f"{indices_mapped[0][j]},{indices_mapped[1][j]},{indices_mapped[2][j]}"
             indices_counts[key] = indices_counts.get(key, 0) + 1
-        loss = loss_func(embeddings, labels, indices_tuple, embs_list=embs)
+        cross_geometry = triplet_geometry_summary(
+            embeddings,
+            indices_tuple,
+            loss_func.distance,
+            labels=labels,
+            ref_labels=ref_labels,
+        )
+        cross_loss = loss_func(embeddings, labels, indices_tuple, embs_list=embs)
+        cross_active_triplets = reducer_active_triplets(loss_func)
+        add_triplet_summary(cross_triplet_summary, cross_geometry, cross_active_triplets)
+
+        local_loss = torch.sum(embeddings * 0)
+        local_candidate_triplets = 0
+        local_mined_triplets = 0
+        if local_triplet_weight > 0 and local_loss_func is not None and local_mining_func is not None:
+            local_indices_tuple = local_mining_func(embeddings, labels, species, mnn=False)
+            local_candidate_triplets = int(getattr(local_mining_func, "candidate_triplets", local_mining_func.num_triplets))
+            local_mined_triplets = int(local_mining_func.num_triplets)
+            local_geometry = triplet_geometry_summary(
+                embeddings,
+                local_indices_tuple,
+                local_loss_func.distance,
+                labels=labels,
+                ref_labels=ref_labels,
+            )
+            local_loss = local_loss_func(embeddings, labels, local_indices_tuple, embs_list=embs)
+            local_active_triplets = reducer_active_triplets(local_loss_func)
+            add_triplet_summary(local_triplet_summary, local_geometry, local_active_triplets)
+
+        divergence_loss = torch.sum(embeddings * 0)
+        divergence_rows = 0
+        divergence_pairs = 0
+        if divergence_weight > 0 and teacher_embeddings is not None:
+            divergence_loss, divergence_rows, divergence_pairs = lmu.neighborhood_kl_divergence(
+                embeddings,
+                teacher_embeddings,
+                species,
+                temperature=divergence_temperature,
+                scope=divergence_scope,
+            )
+
+        weighted_divergence_loss = divergence_weight * divergence_loss
+        loss = cross_loss + (local_triplet_weight * local_loss) + weighted_divergence_loss
         
         if equalize_triplets_species:
             species_mapped = [species[i] for i in indices_tuple] # a,p,n species vectors
@@ -127,7 +315,18 @@ def train(model, loss_func, mining_func, device,
             
             # WEIGHT THE LOSS BY THE NUMBER OF TRIPLETS MINED PER SPECIES
             loss = torch.mul(torch.mul(loss, a_bal_inv), p_bal_inv).mean()                                         
-                                                       
+        epoch_losses.append(float(loss.detach().cpu()))
+        epoch_cross_losses.append(float(cross_loss.detach().cpu()))
+        epoch_local_losses.append(float(local_loss.detach().cpu()))
+        epoch_divergence_losses.append(float(divergence_loss.detach().cpu()))
+        epoch_weighted_divergence_losses.append(float(weighted_divergence_loss.detach().cpu()))
+        epoch_candidate_counts.append(int(getattr(mining_func, "candidate_triplets", mining_func.num_triplets)))
+        epoch_triplet_counts.append(int(mining_func.num_triplets))
+        epoch_local_candidate_counts.append(local_candidate_triplets)
+        epoch_local_triplet_counts.append(local_mined_triplets)
+        epoch_divergence_rows.append(int(divergence_rows))
+        epoch_divergence_pairs.append(int(divergence_pairs))
+
         loss.backward()
         optimizer.step()
 
@@ -135,6 +334,33 @@ def train(model, loss_func, mining_func, device,
             print("Epoch {} Iteration {}: Loss = {}, Number of mined triplets "
                   "= {}".format(epoch, batch_idx, loss,
                                 mining_func.num_triplets))
+    epoch_summary = {
+        "epoch": epoch,
+        "metric_loss": float(np.mean(epoch_losses)) if epoch_losses else 0.0,
+        "cross_loss": float(np.mean(epoch_cross_losses)) if epoch_cross_losses else 0.0,
+        "local_loss": float(np.mean(epoch_local_losses)) if epoch_local_losses else 0.0,
+        "divergence_loss": float(np.mean(epoch_divergence_losses)) if epoch_divergence_losses else 0.0,
+        "weighted_divergence_loss": float(np.mean(epoch_weighted_divergence_losses)) if epoch_weighted_divergence_losses else 0.0,
+        "candidate_triplets": int(np.sum(epoch_candidate_counts)) if epoch_candidate_counts else 0,
+        "mined_triplets": int(np.sum(epoch_triplet_counts)) if epoch_triplet_counts else 0,
+        "local_candidate_triplets": int(np.sum(epoch_local_candidate_counts)) if epoch_local_candidate_counts else 0,
+        "local_mined_triplets": int(np.sum(epoch_local_triplet_counts)) if epoch_local_triplet_counts else 0,
+        "divergence_rows": int(np.sum(epoch_divergence_rows)) if epoch_divergence_rows else 0,
+        "divergence_pairs": int(np.sum(epoch_divergence_pairs)) if epoch_divergence_pairs else 0,
+        "mean_candidate_triplets_per_batch": float(np.mean(epoch_candidate_counts)) if epoch_candidate_counts else 0.0,
+        "mean_mined_triplets_per_batch": float(np.mean(epoch_triplet_counts)) if epoch_triplet_counts else 0.0,
+        "mean_local_candidate_triplets_per_batch": float(np.mean(epoch_local_candidate_counts)) if epoch_local_candidate_counts else 0.0,
+        "mean_local_mined_triplets_per_batch": float(np.mean(epoch_local_triplet_counts)) if epoch_local_triplet_counts else 0.0,
+        "mean_divergence_rows_per_batch": float(np.mean(epoch_divergence_rows)) if epoch_divergence_rows else 0.0,
+        "mean_divergence_pairs_per_batch": float(np.mean(epoch_divergence_pairs)) if epoch_divergence_pairs else 0.0,
+        "local_triplet_weight": local_triplet_weight,
+        "divergence_weight": divergence_weight,
+        "divergence_temperature": divergence_temperature,
+        "divergence_scope": divergence_scope if divergence_weight > 0 else "none",
+    }
+    epoch_summary.update(finalize_triplet_summary("cross", cross_triplet_summary))
+    epoch_summary.update(finalize_triplet_summary("local", local_triplet_summary))
+    return epoch_summary
 
 
 def pretrain_saturn(model, pretrain_loader, optimizer, device, nepochs, 
@@ -269,6 +495,7 @@ def pretrain_saturn(model, pretrain_loader, optimizer, device, nepochs,
         pbar.set_description(loss_string)
         for species in sorted_species_names:
             all_ave_losses[species].append(np.mean(epoch_ave_losses[species]))
+    model.pretrain_loss_history = all_ave_losses
     return model
 
 
@@ -411,6 +638,305 @@ def create_output_anndata(train_emb, train_lab, train_species, train_macrogenes,
     if obs_names is not None:
         adata.obs_names = obs_names
     return adata
+
+
+def file_sha256(path):
+    if path is None or not Path(path).exists():
+        return None
+    digest = hashlib.sha256()
+    with open(path, "rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _json_safe(value):
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    return str(value)
+
+
+def save_metric_adata(
+    dataset,
+    model,
+    device,
+    use_batch_labels,
+    celltype_id_map,
+    reftype_id_map,
+    all_obs_names,
+    output_path,
+    batchtype_id_map=None,
+):
+    if use_batch_labels:
+        train_emb, train_lab, train_species, train_macrogenes, train_ref, train_batch = get_all_embeddings_metric(
+            dataset, model, device, use_batch_labels
+        )
+        adata = create_output_anndata(
+            train_emb,
+            train_lab,
+            train_species,
+            train_macrogenes.cpu().numpy(),
+            train_ref,
+            celltype_id_map,
+            reftype_id_map,
+            use_batch_labels,
+            batchtype_id_map,
+            train_batch,
+            obs_names=all_obs_names,
+        )
+    else:
+        train_emb, train_lab, train_species, train_macrogenes, train_ref = get_all_embeddings_metric(
+            dataset, model, device, use_batch_labels
+        )
+        adata = create_output_anndata(
+            train_emb,
+            train_lab,
+            train_species,
+            train_macrogenes.cpu().numpy(),
+            train_ref,
+            celltype_id_map,
+            reftype_id_map,
+            obs_names=all_obs_names,
+        )
+    adata.write(output_path)
+    return adata
+
+
+def run_label_free_finetuning(
+    args,
+    metric_model,
+    test_metric_dataset,
+    device,
+    sorted_species_names,
+    metric_dir,
+    celltype_id_map,
+    reftype_id_map,
+    all_obs_names,
+    use_batch_labels=False,
+    batchtype_id_map=None,
+):
+    """Fine-tune without constructing, storing, or accepting cell-label tensors."""
+    if args.teacher_artifacts_path is None:
+        raise ValueError("--teacher_artifacts_path is required for label-free fine-tuning")
+    artifact_data = np.load(args.teacher_artifacts_path, allow_pickle=True)
+    if len(artifact_data["embeddings"]) != len(test_metric_dataset):
+        raise ValueError("Teacher artifacts do not match the fine-tuning dataset")
+
+    label_free_dataset = ExperimentDatasetMultiLabelFree(
+        {species: test_metric_dataset.xs[species] for species in sorted_species_names}
+    )
+    train_loader = torch.utils.data.DataLoader(
+        label_free_dataset,
+        collate_fn=label_free_multi_species_collate_fn,
+        batch_size=args.batch_size,
+        shuffle=True,
+        generator=torch.Generator().manual_seed(args.seed),
+    )
+
+    topology_neighbors = torch.from_numpy(artifact_data["topology_neighbors"]).long()
+    topology_probabilities = torch.from_numpy(
+        artifact_data["topology_probabilities"]
+    ).float()
+    frozen_positives = torch.from_numpy(artifact_data["frozen_positives"]).long()
+    frozen_positive_weights = torch.from_numpy(
+        artifact_data["frozen_positive_weights"]
+    ).float()
+    teacher_embeddings = torch.from_numpy(artifact_data["embeddings"]).float().to(device)
+    teacher_macrogenes = torch.from_numpy(artifact_data["macrogenes"]).float().to(device)
+    mmd_bandwidth = float(artifact_data["mmd_bandwidth"])
+    species_to_code = {species: index for index, species in enumerate(sorted_species_names)}
+
+    discriminator = None
+    parameters = list(metric_model.parameters())
+    if args.finetune_objective == "adversarial":
+        discriminator = SpeciesDiscriminator(args.model_dim, len(sorted_species_names)).to(device)
+        parameters += list(discriminator.parameters())
+    optimizer = optim.Adam(parameters, lr=args.metric_lr)
+
+    config = {key: _json_safe(value) for key, value in vars(args).items()}
+    config.update(
+        {
+            "label_free": True,
+            "pretrain_checkpoint_sha256": file_sha256(args.pretrain_model_path),
+            "teacher_artifacts_sha256": file_sha256(args.teacher_artifacts_path),
+        }
+    )
+    with open(metric_dir / "config.json", "w") as handle:
+        json.dump(config, handle, indent=2, sort_keys=True)
+
+    if args.finetune_objective in PHASE2_OBJECTIVES:
+        def save_phase2_adata(output_path):
+            return save_metric_adata(
+                test_metric_dataset,
+                metric_model,
+                device,
+                use_batch_labels,
+                celltype_id_map,
+                reftype_id_map,
+                all_obs_names,
+                output_path,
+                batchtype_id_map,
+            )
+
+        run_phase2_finetuning(
+            args,
+            metric_model,
+            label_free_dataset,
+            train_loader,
+            device,
+            sorted_species_names,
+            metric_dir,
+            artifact_data,
+            save_phase2_adata,
+        )
+        return
+
+    history = []
+    for epoch in range(1, args.epochs + 1):
+        embedding_bank = embed_label_free_dataset(
+            metric_model, label_free_dataset, device, batch_size=args.batch_size
+        ).to(device)
+        metric_model.train()
+        if discriminator is not None:
+            discriminator.train()
+        batch_rows = []
+        for batch_index, batch_dict in enumerate(train_loader):
+            optimizer.zero_grad()
+            embedding_parts = []
+            species_parts = []
+            index_parts = []
+            for species_name, (values, global_indices) in batch_dict.items():
+                values = values.to(device)
+                embedding_parts.append(F.normalize(metric_model(values, species_name), dim=1))
+                species_parts.append(
+                    torch.full(
+                        (len(values),),
+                        species_to_code[species_name],
+                        dtype=torch.long,
+                        device=device,
+                    )
+                )
+                index_parts.append(global_indices.to(device))
+
+            embeddings = torch.cat(embedding_parts)
+            species_codes = torch.cat(species_parts)
+            global_indices = torch.cat(index_parts)
+            topology_loss = frozen_topology_loss(
+                embeddings,
+                global_indices,
+                embedding_bank,
+                topology_neighbors,
+                topology_probabilities,
+                temperature=args.topology_temperature,
+            )
+
+            coverage = len(embeddings)
+            adversarial_coefficient = 0.0
+            if args.finetune_objective == "online_mnn":
+                alignment_loss, coverage = online_cross_species_mnn_loss(
+                    embeddings, species_codes
+                )
+            elif args.finetune_objective == "frozen_neighbors":
+                alignment_loss, coverage = frozen_neighbor_attraction_loss(
+                    embeddings,
+                    global_indices,
+                    embedding_bank,
+                    frozen_positives,
+                    frozen_positive_weights,
+                )
+            elif args.finetune_objective == "mmd":
+                alignment_loss = multi_species_mmd(
+                    embeddings, species_codes, mmd_bandwidth
+                )
+            elif args.finetune_objective == "partial_ot":
+                alignment_loss = partial_ot_alignment_loss(
+                    embeddings,
+                    teacher_embeddings[global_indices],
+                    teacher_macrogenes[global_indices],
+                    species_codes,
+                    epsilon=args.ot_epsilon,
+                    transported_mass=args.ot_mass,
+                    iterations=args.ot_iterations,
+                )
+            elif args.finetune_objective == "adversarial":
+                progress = (
+                    ((epoch - 1) * len(train_loader) + batch_index)
+                    / max(args.epochs * len(train_loader) - 1, 1)
+                )
+                adversarial_coefficient = args.adversarial_max_weight * (
+                    2.0 / (1.0 + math.exp(-10.0 * progress)) - 1.0
+                )
+                logits = discriminator(embeddings, adversarial_coefficient)
+                alignment_loss = balanced_species_cross_entropy(logits, species_codes)
+            else:
+                raise ValueError(f"Unsupported label-free objective: {args.finetune_objective}")
+
+            total_loss = alignment_loss + args.topology_weight * topology_loss
+            if not torch.isfinite(total_loss):
+                raise FloatingPointError(
+                    f"Non-finite loss in {args.finetune_objective} epoch {epoch}"
+                )
+            total_loss.backward()
+            optimizer.step()
+            batch_rows.append(
+                {
+                    "loss": float(total_loss.detach().cpu()),
+                    "alignment_loss": float(alignment_loss.detach().cpu()),
+                    "topology_loss": float(topology_loss.detach().cpu()),
+                    "coverage": coverage,
+                    "adversarial_coefficient": adversarial_coefficient,
+                }
+            )
+
+        epoch_row = {
+            "epoch": epoch,
+            "metric_loss": float(np.mean([row["loss"] for row in batch_rows])),
+            "alignment_loss": float(np.mean([row["alignment_loss"] for row in batch_rows])),
+            "topology_loss": float(np.mean([row["topology_loss"] for row in batch_rows])),
+            "mean_coverage_per_batch": float(np.mean([row["coverage"] for row in batch_rows])),
+            "adversarial_coefficient": float(batch_rows[-1]["adversarial_coefficient"]),
+            "finetune_objective": args.finetune_objective,
+        }
+        history.append(epoch_row)
+        print(
+            f"Epoch {epoch}: loss={epoch_row['metric_loss']:.6f}, "
+            f"alignment={epoch_row['alignment_loss']:.6f}, "
+            f"topology={epoch_row['topology_loss']:.6f}"
+        )
+        if epoch % args.polling_freq == 0:
+            save_metric_adata(
+                test_metric_dataset,
+                metric_model,
+                device,
+                use_batch_labels,
+                celltype_id_map,
+                reftype_id_map,
+                all_obs_names,
+                metric_dir / f"adata_ep_{epoch}.h5ad",
+                batchtype_id_map,
+            )
+
+    history_path = metric_dir / "metric_history.csv"
+    pd.DataFrame(history).to_csv(history_path, index=False)
+    model_path = Path(args.metric_model_path) if args.metric_model_path else metric_dir / "final_model.pt"
+    model_path.parent.mkdir(parents=True, exist_ok=True)
+    torch.save(metric_model.state_dict(), model_path)
+    final_path = metric_dir / "final_adata.h5ad"
+    save_metric_adata(
+        test_metric_dataset,
+        metric_model,
+        device,
+        use_batch_labels,
+        celltype_id_map,
+        reftype_id_map,
+        all_obs_names,
+        final_path,
+        batchtype_id_map,
+    )
+    print(f"Final AnnData Path: {final_path}")
+    print(f"Final Metric history csv Path: {history_path}")
+    print(f"Final Metric Model Path: {model_path}")
+
 
 def trainer(args):
     '''
@@ -762,6 +1288,13 @@ def trainer(args):
     pretrain_adata_path = metric_dir / pretrain_adata_fn
     adata.write(pretrain_adata_path)
 
+    if hasattr(pretrain_model, "pretrain_loss_history"):
+        pretrain_loss_df = pd.DataFrame(pretrain_model.pretrain_loss_history)
+        pretrain_loss_df.insert(0, "epoch", np.arange(1, len(pretrain_loss_df) + 1))
+        pretrain_loss_path = metric_dir / "pretrain_losses.csv"
+        pretrain_loss_df.to_csv(pretrain_loss_path, index=False)
+        print(f"Pretrain losses csv Path: {pretrain_loss_path}")
+
     # Score the pretraining Dataset
     if args.score_adatas:
         print("*****PRETRAIN SCORES*****")
@@ -825,7 +1358,46 @@ def trainer(args):
         metric_model = pretrain_model
         metric_model.metric_learning_mode = True
     
-    metric_model.to(device) 
+    metric_model.to(device)
+    if args.finetune_objective != "labeled":
+        if args.unfreeze_macrogenes:
+            raise ValueError("Label-free benchmark objectives require frozen macrogenes")
+        run_label_free_finetuning(
+            args,
+            metric_model,
+            test_metric_dataset,
+            device,
+            sorted_species_names,
+            metric_dir,
+            celltype_id_map,
+            reftype_id_map,
+            all_obs_names,
+            use_batch_labels=use_batch_labels,
+            batchtype_id_map=locals().get("batchtype_id_map"),
+        )
+        return
+
+    baseline_config = {key: _json_safe(value) for key, value in vars(args).items()}
+    baseline_config.update(
+        {
+            "label_free": False,
+            "pretrain_checkpoint_sha256": file_sha256(args.pretrain_model_path),
+        }
+    )
+    with open(metric_dir / "config.json", "w") as handle:
+        json.dump(baseline_config, handle, indent=2, sort_keys=True)
+
+    divergence_teacher_model = None
+    if args.divergence_weight > 0:
+        divergence_teacher_model = deepcopy(metric_model).to(device)
+        divergence_teacher_model.eval()
+        for param in divergence_teacher_model.parameters():
+            param.requires_grad = False
+        print(
+            f"Using same-species neighborhood divergence penalty with weight "
+            f"{args.divergence_weight}, temperature {args.divergence_temperature}, "
+            f"scope {args.divergence_scope}"
+        )
     optimizer = optim.Adam(metric_model.parameters(), lr=args.metric_lr)
     
     #### START METRIC LEARNING ####
@@ -838,34 +1410,68 @@ def trainer(args):
     )
     
     distance = distances.CosineSimilarity()
-    reducer = reducers.ThresholdReducer(low = 0)
+    cross_reducer = reducers.ThresholdReducer(low = 0)
     
     # TripletMarginMMDLoss
     loss_func = losses.TripletMarginLoss(
         margin=0.2,
         distance=distance,
-        reducer=reducer,
+        reducer=cross_reducer,
     )
+
+    metric_triplet_type = args.metric_triplet_type
+    if metric_triplet_type == "auto":
+        metric_triplet_type = "all" if args.metric_miner_type.startswith("unsupervised_") else "semihard"
+    print(f"Using metric miner {args.metric_miner_type} with {metric_triplet_type} triplets")
 
     mining_func = miners.TripletMarginMiner(
         margin=0.2,
         distance=distance,
-        type_of_triplets="semihard",
-        miner_type="cross_species",
+        type_of_triplets=metric_triplet_type,
+        miner_type=args.metric_miner_type,
     )
+
+    local_loss_func = None
+    local_mining_func = None
+    if args.local_triplet_weight > 0:
+        local_reducer = reducers.ThresholdReducer(low = 0)
+        local_loss_func = losses.TripletMarginLoss(
+            margin=0.2,
+            distance=distance,
+            reducer=local_reducer,
+        )
+        local_mining_func = miners.TripletMarginMiner(
+            margin=0.2,
+            distance=distance,
+            type_of_triplets=args.local_triplet_type,
+            miner_type="same_species_local",
+        )
+        print(f"Using same-species local triplet regularizer with weight {args.local_triplet_weight} and {args.local_triplet_type} triplets")
 
     print("***STARTING METRIC TRAINING***")
     all_indices_counts = pd.DataFrame(columns=["Epoch", "Triplet", "Count"])
+    metric_history = []
     
     scores_df = pd.DataFrame(columns=["epoch", "score", "type"] + list(sorted_species_names))
     batch_size_multiplier = 1
     for epoch in range(1, args.epochs+1):
         epoch_indices_counts = {}
                
-        train(metric_model, loss_func, mining_func, device,
-              train_loader, optimizer, epoch, args.mnn,
-              sorted_species_names, use_ref_labels=args.use_ref_labels, indices_counts=epoch_indices_counts, 
-              equalize_triplets_species = args.equalize_triplets_species)
+        epoch_metrics = train(metric_model, loss_func, mining_func, device,
+                              train_loader, optimizer, epoch, args.mnn,
+                              sorted_species_names, use_ref_labels=args.use_ref_labels, indices_counts=epoch_indices_counts,
+                              equalize_triplets_species = args.equalize_triplets_species,
+                              local_loss_func=local_loss_func, local_mining_func=local_mining_func,
+                              local_triplet_weight=args.local_triplet_weight,
+                              divergence_teacher_model=divergence_teacher_model,
+                              divergence_weight=args.divergence_weight,
+                              divergence_temperature=args.divergence_temperature,
+                              divergence_scope=args.divergence_scope)
+        epoch_metrics["metric_miner_type"] = args.metric_miner_type
+        epoch_metrics["metric_triplet_type"] = metric_triplet_type
+        epoch_metrics["local_triplet_type"] = args.local_triplet_type if args.local_triplet_weight > 0 else "none"
+        epoch_metrics["divergence_scope"] = args.divergence_scope if args.divergence_weight > 0 else "none"
+        metric_history.append(epoch_metrics)
 
         epoch_df = pd.DataFrame.from_records(list(epoch_indices_counts.items()), columns=["Triplet", "Count"])
         epoch_df["Epoch"] = epoch
@@ -953,11 +1559,13 @@ def trainer(args):
         triplets_fn = "triplets.csv"
         epoch_scores_fn = "epoch_scores.csv"
         celltype_id_fn = "celltype_id.pkl"
+        metric_history_fn = "metric_history.csv"
     else:
         final_adata_fn = f'{run_name}.h5ad'
         triplets_fn = f'{run_name}_triplets.csv'
         epoch_scores_fn = f'{run_name}_epoch_scores.csv'
         celltype_id_fn = f'{run_name}_celltype_id.pkl'
+        metric_history_fn = f'{run_name}_metric_history.csv'
 
 
     final_path = metric_dir / final_adata_fn
@@ -968,6 +1576,9 @@ def trainer(args):
     
     final_path_epoch_scores = metric_dir / epoch_scores_fn
     scores_df.to_csv(final_path_epoch_scores, index=False)
+
+    final_path_metric_history = metric_dir / metric_history_fn
+    pd.DataFrame(metric_history).to_csv(final_path_metric_history, index=False)
     
     final_path_ctid = metric_dir / celltype_id_fn
     with open(final_path_ctid, "wb+") as f:
@@ -980,6 +1591,7 @@ def trainer(args):
     print(f"Final AnnData Path: {final_path}")
     print(f"Final Triplets csv Path: {final_path_triplets}")
     print(f"Final Epoch scores csv Path: {final_path_epoch_scores}")
+    print(f"Final Metric history csv Path: {final_path_metric_history}")
     print(f"Final celltype_id Path: {final_path_ctid}")
 
 
@@ -1046,7 +1658,7 @@ if __name__ == '__main__':
     
     
     # Pretrain Arguments
-    parser.add_argument('--pretrain', type=bool, nargs='?', const=True,
+    parser.add_argument('--pretrain', type=str2bool, nargs='?', const=True,
                     help='Pretrain the model')
     parser.add_argument('--pretrain_model_path', type=str,
                         help='Path to save/load a pretraining model to')
@@ -1064,7 +1676,7 @@ if __name__ == '__main__':
                         help='Number of pretraining epochs')
     parser.add_argument('--unfreeze_macrogenes', type=bool, nargs='?', const=True,
                         help='Let Metric Learning Modify macrogene weights')
-    parser.add_argument('--mnn', type=bool, nargs='?', const=True, 
+    parser.add_argument('--mnn', type=str2bool, nargs='?', const=True,
                         help='Use mutual nearest neighbors')
     parser.add_argument('--use_ref_labels', type=bool, nargs='?', const=True, 
                     help='Use reference labels when aligning')
@@ -1076,6 +1688,47 @@ if __name__ == '__main__':
                         help='Number of epochs for metric learning')
     parser.add_argument('--metric_model_path', type=str,
                         help='Path to save/load a metric (macrogene -> embedding) model to')
+    parser.add_argument('--finetune_objective', type=str,
+                        choices=['labeled', 'online_mnn', 'frozen_neighbors', 'mmd', 'partial_ot', 'adversarial',
+                                 'bridge_frozen', 'bridge_mmd', 'low_mass_ot', 'fused_gw', 'anchor_curriculum'],
+                        help='Fine-tuning objective; all choices except labeled use the strict label-free data path')
+    parser.add_argument('--teacher_artifacts_path', type=str,
+                        help='Frozen label-free graph and embedding artifact used by label-free objectives')
+    parser.add_argument('--phase2_artifacts_path', type=str,
+                        help='Frozen multi-scale preservation and anchor artifacts for phase-2 objectives')
+    parser.add_argument('--anchor_diagnostics_path', type=str,
+                        help='Phase-2 anchor construction diagnostics JSON')
+    parser.add_argument('--topology_weight', type=float,
+                        help='Weight for frozen within-species neighborhood preservation')
+    parser.add_argument('--topology_temperature', type=float,
+                        help='Temperature for frozen neighborhood distribution preservation')
+    parser.add_argument('--ot_epsilon', type=float,
+                        help='Entropic regularization for partial optimal transport')
+    parser.add_argument('--ot_mass', type=float,
+                        help='Fraction of probability mass transported by partial optimal transport')
+    parser.add_argument('--ot_iterations', type=int,
+                        help='Number of partial Sinkhorn projection iterations')
+    parser.add_argument('--adversarial_max_weight', type=float,
+                        help='Maximum gradient-reversal coefficient for species adversarial training')
+    parser.add_argument('--metric_miner_type', type=str,
+                        choices=['random', 'cross_species', 'cross_species_coarse', 'unsupervised_cross_species',
+                                 'unsupervised_cross_species_contrastive'],
+                        help='Metric learning triplet miner to use')
+    parser.add_argument('--metric_triplet_type', type=str,
+                        choices=['auto', 'all', 'hard', 'semihard', 'easy', 'unfiltered'],
+                        help='Triplet filter to apply after candidate mining. Auto uses all for unsupervised and semihard otherwise.')
+    parser.add_argument('--local_triplet_weight', type=float,
+                        help='Weight for same-species local triplet regularization during metric learning')
+    parser.add_argument('--local_triplet_type', type=str,
+                        choices=['all', 'hard', 'semihard', 'easy', 'unfiltered'],
+                        help='Triplet filter for same-species local regularization')
+    parser.add_argument('--divergence_weight', type=float,
+                        help='Weight for preserving pretrained neighborhood distributions during metric learning')
+    parser.add_argument('--divergence_temperature', type=float,
+                        help='Softmax temperature for pretrained neighborhood distribution preservation')
+    parser.add_argument('--divergence_scope', type=str,
+                        choices=['same_species', 'all'],
+                        help='Which neighbors to preserve for the divergence penalty')
     
     # Balancing arguments
     parser.add_argument('--balance_pretrain', type=bool, nargs='?', const=True,
@@ -1118,6 +1771,23 @@ if __name__ == '__main__':
         num_macrogenes=2000,
         epochs=50,
         metric_lr=0.001,
+        finetune_objective='labeled',
+        teacher_artifacts_path=None,
+        phase2_artifacts_path=None,
+        anchor_diagnostics_path=None,
+        topology_weight=0.1,
+        topology_temperature=0.1,
+        ot_epsilon=0.05,
+        ot_mass=0.8,
+        ot_iterations=50,
+        adversarial_max_weight=0.1,
+        metric_miner_type='cross_species',
+        metric_triplet_type='auto',
+        local_triplet_weight=0.0,
+        local_triplet_type='unfiltered',
+        divergence_weight=0.0,
+        divergence_temperature=0.1,
+        divergence_scope='same_species',
         pretrain_epochs=200,
         log_dir='tboard_log/',
         work_dir='./out/',
@@ -1150,7 +1820,8 @@ if __name__ == '__main__':
     )
 
     args = parser.parse_args()
-    torch.cuda.set_device(args.device_num)
+    if str(args.device).startswith("cuda") and torch.cuda.is_available():
+        torch.cuda.set_device(args.device_num)
     print(f"Using Device {args.device_num}")
     # Numpy seed
     np.random.seed(args.seed)
@@ -1165,4 +1836,3 @@ if __name__ == '__main__':
         ExperimentDatasetMultiEqual = ExperimentDatasetMulti
 
     trainer(args)
-

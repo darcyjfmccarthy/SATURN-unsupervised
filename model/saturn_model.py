@@ -200,7 +200,7 @@ class SATURNPretrainModel(torch.nn.Module):
         x = F.relu(x) # all pos
 
         # Dropout
-        x = F.dropout(x, self.dropout)
+        x = F.dropout(x, self.dropout, training=self.training)
 
         # NOTE: the last four components are what is called a "full_block" at the top of this file.
         # Basically it's an encoder into macrogene/centroid space that "tokenises" the gene expression
@@ -549,7 +549,7 @@ class TransferModel(torch.nn.Module):
             x = nn.functional.linear(expr, self.guide_weights.exp())
             x = self.guide_layer_norm(x)
             x = F.relu(x) # all pos
-            x = F.dropout(x, self.dropout)
+            x = F.dropout(x, self.dropout, training=self.training)
 
             # NOTE: This chunk comes straight from the pretrain model
             batch_size = inp.shape[0]
@@ -562,7 +562,7 @@ class TransferModel(torch.nn.Module):
         x = nn.functional.linear(expr, self.p_weights.exp())
         x = self.cl_layer_norm(x)
         x = F.relu(x) # all pos
-        x = F.dropout(x, self.dropout)
+        x = F.dropout(x, self.dropout, training=self.training)
         encoder_input = x.squeeze()
 
         # Encode the macrogene input (inp -> hidden_dim, hidden_dim -> embed_dim)

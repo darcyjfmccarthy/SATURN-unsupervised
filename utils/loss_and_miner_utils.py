@@ -2,6 +2,7 @@ import math
 
 import numpy as np
 import torch
+import torch.nn.functional as F
 
 from utils import common_functions as c_f
 
@@ -438,6 +439,289 @@ def get_species_triplet_indices( # returns indices of triplet
     else:
         empty = torch.LongTensor([]).to(labels_device)
         return empty.clone(), empty.clone(), empty.clone()
+
+
+def get_unsupervised_cross_species_triplet_indices(
+    labels, species, embeddings, distance, mnn=True
+):
+    """
+    Build label-free triplets for cross-species metric learning.
+
+    For each anchor, the positive is its nearest cross-species neighbor. If mnn
+    is enabled, the positive must also pick the anchor as its nearest neighbor
+    within the anchor's species. The negative is a random same-species, non-self
+    cell.
+    """
+    labels_device = labels.device
+    n = embeddings.shape[0]
+    if n < 2 or len(torch.unique(species)) < 2:
+        empty = torch.LongTensor([]).to(labels_device)
+        return empty.clone(), empty.clone(), empty.clone()
+
+    mat = distance(embeddings, embeddings)
+    invalid_value = -float("inf") if distance.is_inverted else float("inf")
+
+    a_idx, p_idx, n_idx = [], [], []
+    all_indices = torch.arange(n, device=labels_device)
+
+    for anchor in range(n):
+        anchor_tensor = torch.tensor(anchor, device=labels_device)
+        anchor_species = species[anchor]
+
+        positive_mask = species != anchor_species
+        if not torch.any(positive_mask):
+            continue
+
+        positive_scores = mat[anchor].clone()
+        positive_scores[~positive_mask] = invalid_value
+        positive = (
+            torch.argmax(positive_scores)
+            if distance.is_inverted
+            else torch.argmin(positive_scores)
+        )
+
+        if mnn:
+            reciprocal_mask = species == anchor_species
+            reciprocal_scores = mat[positive].clone()
+            reciprocal_scores[~reciprocal_mask] = invalid_value
+            reciprocal = (
+                torch.argmax(reciprocal_scores)
+                if distance.is_inverted
+                else torch.argmin(reciprocal_scores)
+            )
+            if reciprocal != anchor_tensor:
+                continue
+
+        negative_candidates = all_indices[
+            (species == anchor_species) & (all_indices != anchor)
+        ]
+        if len(negative_candidates) == 0:
+            continue
+        negative = negative_candidates[
+            torch.randint(0, len(negative_candidates), (1,), device=labels_device)
+        ][0]
+
+        a_idx.append(anchor_tensor)
+        p_idx.append(positive)
+        n_idx.append(negative)
+
+    if len(a_idx) > 0:
+        return (
+            torch.stack(a_idx).to(labels_device).long(),
+            torch.stack(p_idx).to(labels_device).long(),
+            torch.stack(n_idx).to(labels_device).long(),
+        )
+    empty = torch.LongTensor([]).to(labels_device)
+    return empty.clone(), empty.clone(), empty.clone()
+
+
+def get_unsupervised_cross_species_contrastive_triplet_indices(
+    labels, species, embeddings, distance, mnn=True
+):
+    """
+    Build label-free triplets where both positives and negatives are cross-species.
+
+    For each anchor, the positive is its nearest cross-species neighbor. The
+    negative is a random farther cross-species cell, falling back to any
+    non-positive cross-species cell if no strictly farther cell exists.
+    """
+    labels_device = labels.device
+    n = embeddings.shape[0]
+    if n < 3 or len(torch.unique(species)) < 2:
+        empty = torch.LongTensor([]).to(labels_device)
+        return empty.clone(), empty.clone(), empty.clone()
+
+    mat = distance(embeddings, embeddings)
+    invalid_value = -float("inf") if distance.is_inverted else float("inf")
+
+    a_idx, p_idx, n_idx = [], [], []
+    all_indices = torch.arange(n, device=labels_device)
+
+    for anchor in range(n):
+        anchor_tensor = torch.tensor(anchor, device=labels_device)
+        anchor_species = species[anchor]
+
+        cross_mask = species != anchor_species
+        if torch.sum(cross_mask) < 2:
+            continue
+
+        positive_scores = mat[anchor].clone()
+        positive_scores[~cross_mask] = invalid_value
+        positive = (
+            torch.argmax(positive_scores)
+            if distance.is_inverted
+            else torch.argmin(positive_scores)
+        )
+        positive_score = mat[anchor, positive]
+
+        if mnn:
+            reciprocal_mask = species == anchor_species
+            reciprocal_scores = mat[positive].clone()
+            reciprocal_scores[~reciprocal_mask] = invalid_value
+            reciprocal = (
+                torch.argmax(reciprocal_scores)
+                if distance.is_inverted
+                else torch.argmin(reciprocal_scores)
+            )
+            if reciprocal != anchor_tensor:
+                continue
+
+        non_positive_cross = cross_mask & (all_indices != positive)
+        if distance.is_inverted:
+            farther_mask = non_positive_cross & (mat[anchor] < positive_score)
+        else:
+            farther_mask = non_positive_cross & (mat[anchor] > positive_score)
+
+        negative_candidates = all_indices[farther_mask]
+        if len(negative_candidates) == 0:
+            negative_candidates = all_indices[non_positive_cross]
+        if len(negative_candidates) == 0:
+            continue
+
+        negative = negative_candidates[
+            torch.randint(0, len(negative_candidates), (1,), device=labels_device)
+        ][0]
+
+        a_idx.append(anchor_tensor)
+        p_idx.append(positive)
+        n_idx.append(negative)
+
+    if len(a_idx) > 0:
+        return (
+            torch.stack(a_idx).to(labels_device).long(),
+            torch.stack(p_idx).to(labels_device).long(),
+            torch.stack(n_idx).to(labels_device).long(),
+        )
+    empty = torch.LongTensor([]).to(labels_device)
+    return empty.clone(), empty.clone(), empty.clone()
+
+
+def get_same_species_local_triplet_indices(labels, species, embeddings, distance):
+    """
+    Build same-species local-preservation triplets.
+
+    For each anchor, the positive is the nearest same-species non-self cell. The
+    negative is a random farther same-species cell, falling back to any
+    non-positive same-species non-self cell if no strictly farther cell exists.
+    """
+    labels_device = labels.device
+    n = embeddings.shape[0]
+    if n < 3:
+        empty = torch.LongTensor([]).to(labels_device)
+        return empty.clone(), empty.clone(), empty.clone()
+
+    mat = distance(embeddings, embeddings)
+    invalid_value = -float("inf") if distance.is_inverted else float("inf")
+
+    a_idx, p_idx, n_idx = [], [], []
+    all_indices = torch.arange(n, device=labels_device)
+
+    for anchor in range(n):
+        anchor_tensor = torch.tensor(anchor, device=labels_device)
+        anchor_species = species[anchor]
+        same_non_self = (species == anchor_species) & (all_indices != anchor)
+        if torch.sum(same_non_self) < 2:
+            continue
+
+        positive_scores = mat[anchor].clone()
+        positive_scores[~same_non_self] = invalid_value
+        positive = (
+            torch.argmax(positive_scores)
+            if distance.is_inverted
+            else torch.argmin(positive_scores)
+        )
+        positive_score = mat[anchor, positive]
+
+        non_positive_same = same_non_self & (all_indices != positive)
+        if distance.is_inverted:
+            farther_mask = non_positive_same & (mat[anchor] < positive_score)
+        else:
+            farther_mask = non_positive_same & (mat[anchor] > positive_score)
+
+        negative_candidates = all_indices[farther_mask]
+        if len(negative_candidates) == 0:
+            negative_candidates = all_indices[non_positive_same]
+        if len(negative_candidates) == 0:
+            continue
+
+        negative = negative_candidates[
+            torch.randint(0, len(negative_candidates), (1,), device=labels_device)
+        ][0]
+
+        a_idx.append(anchor_tensor)
+        p_idx.append(positive)
+        n_idx.append(negative)
+
+    if len(a_idx) > 0:
+        return (
+            torch.stack(a_idx).to(labels_device).long(),
+            torch.stack(p_idx).to(labels_device).long(),
+            torch.stack(n_idx).to(labels_device).long(),
+        )
+    empty = torch.LongTensor([]).to(labels_device)
+    return empty.clone(), empty.clone(), empty.clone()
+
+
+def neighborhood_kl_divergence(
+    embeddings,
+    teacher_embeddings,
+    species,
+    temperature=0.1,
+    scope="same_species",
+):
+    """
+    Preserve neighborhood distributions from a frozen teacher embedding.
+
+    The default same-species scope keeps within-species biological structure from
+    the pretrained space without forcing the pretrained cross-species separation
+    to remain fixed.
+    """
+    if temperature <= 0:
+        raise ValueError("temperature must be positive")
+    if scope not in {"same_species", "all"}:
+        raise ValueError("scope must be 'same_species' or 'all'")
+
+    n = embeddings.shape[0]
+    if n < 2:
+        return torch.sum(embeddings * 0), 0, 0
+
+    embeddings = F.normalize(embeddings, dim=1)
+    teacher_embeddings = F.normalize(teacher_embeddings.detach(), dim=1)
+    all_indices = torch.arange(n, device=embeddings.device)
+
+    if scope == "all":
+        groups = [all_indices]
+    else:
+        groups = [torch.where(species == curr_species)[0] for curr_species in torch.unique(species)]
+
+    total_loss = torch.sum(embeddings * 0)
+    total_rows = 0
+    total_pairs = 0
+    for group_indices in groups:
+        group_size = len(group_indices)
+        if group_size < 2:
+            continue
+
+        student_group = embeddings[group_indices]
+        teacher_group = teacher_embeddings[group_indices]
+        student_logits = torch.matmul(student_group, student_group.T) / temperature
+        teacher_logits = torch.matmul(teacher_group, teacher_group.T) / temperature
+        diag_mask = torch.eye(group_size, dtype=torch.bool, device=embeddings.device)
+        student_logits = student_logits.masked_fill(diag_mask, -1e9)
+        teacher_logits = teacher_logits.masked_fill(diag_mask, -1e9)
+
+        student_log_probs = F.log_softmax(student_logits, dim=1)
+        teacher_probs = F.softmax(teacher_logits, dim=1)
+        group_loss = F.kl_div(student_log_probs, teacher_probs, reduction="batchmean")
+
+        total_loss = total_loss + (group_loss * group_size)
+        total_rows += group_size
+        total_pairs += group_size * (group_size - 1)
+
+    if total_rows == 0:
+        return torch.sum(embeddings * 0), 0, 0
+    return total_loss / total_rows, total_rows, total_pairs
+
 
 def get_species_triplet_indices_local(
     labels, species, embeddings, distance, ref_labels=None, t_per_anchor=None, weights=None, mnn=True):

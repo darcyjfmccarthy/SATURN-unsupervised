@@ -1,0 +1,5 @@
+species,atlas,gene_embeddings
+a_queenslandica,data/cell_atlases/a_queenslandica.h5ad,data/gene_embeddings/esmc600_embeddings_summaries/a_queenslandica_gene_all_esmc600.pt
+c_elegans,data/cell_atlases/c_elegans.h5ad,data/gene_embeddings/esmc600_embeddings_summaries/c_elegans_gene_all_esmc600.pt
+c_gigas,data/cell_atlases/c_gigas.h5ad,data/gene_embeddings/esmc600_embeddings_summaries/c_gigas_gene_all_esmc600.pt
+c_hemisphaerica,data/cell_atlases/c_hemisphaerica.h5ad,data/gene_embeddings/esmc600_embeddings_summaries/c_hemisphaerica_gene_all_esmc600.pt

@@ -22,7 +22,7 @@ class TripletMarginMiner(BaseTupleMiner):
         self.type_of_triplets = type_of_triplets
         self.add_to_recordable_attributes(list_of_names=["margin"], is_stat=False)
         self.add_to_recordable_attributes(
-            list_of_names=["avg_triplet_margin", "pos_pair_dist", "neg_pair_dist"],
+            list_of_names=["avg_triplet_margin", "pos_pair_dist", "neg_pair_dist", "candidate_triplets"],
             is_stat=True,
         )
         self.miner_type = miner_type
@@ -37,15 +37,29 @@ class TripletMarginMiner(BaseTupleMiner):
         elif self.miner_type == 'cross_species_coarse':
              anchor_idx, positive_idx, negative_idx = lmu.get_species_triplet_indices_coarse(
              labels, species, embeddings, self.distance, ref_labels, mnn=mnn ) 
+        elif self.miner_type == 'unsupervised_cross_species':
+             anchor_idx, positive_idx, negative_idx = lmu.get_unsupervised_cross_species_triplet_indices(
+             labels, species, embeddings, self.distance, mnn=mnn )
+        elif self.miner_type == 'unsupervised_cross_species_contrastive':
+             anchor_idx, positive_idx, negative_idx = lmu.get_unsupervised_cross_species_contrastive_triplet_indices(
+             labels, species, embeddings, self.distance, mnn=mnn )
+        elif self.miner_type == 'same_species_local':
+             anchor_idx, positive_idx, negative_idx = lmu.get_same_species_local_triplet_indices(
+             labels, species, embeddings, self.distance )
+        else:
+             raise ValueError(f"Unknown miner_type: {self.miner_type}")
         
         mat = self.distance(embeddings, ref_emb)
         ap_dist = mat[anchor_idx, positive_idx]
         an_dist = mat[anchor_idx, negative_idx]
+        self.candidate_triplets = len(anchor_idx)
         triplet_margin = (
             ap_dist - an_dist if self.distance.is_inverted else an_dist - ap_dist
         )
 
-        if self.type_of_triplets == "easy":
+        if self.type_of_triplets == "unfiltered":
+            threshold_condition = torch.ones_like(triplet_margin, dtype=torch.bool)
+        elif self.type_of_triplets == "easy":
             threshold_condition = triplet_margin > self.margin
         else:
             threshold_condition = triplet_margin <= self.margin
