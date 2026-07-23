@@ -1,0 +1,340 @@
+measurement_types: [
+  "gene_expression",
+]
+
+gene_expression:
+  source: "Tabula Microcebus (https://www.biorxiv.org/content/10.1101/2021.12.12.469460v2)"
+  path:
+    bladder: "Bladder_FIRM_hvg.h5ad"
+    blood: "Blood_FIRM_hvg.h5ad"
+    bone: "Bone_FIRM_hvg.h5ad"
+    brain: "Brain_FIRM_hvg.h5ad"
+    colon: "Colon_FIRM_hvg.h5ad"
+    diaphragm: "Diaphragm_FIRM_hvg.h5ad"
+    eye: "Eye_retina_FIRM_hvg.h5ad"
+    fat: "Fat_FIRM_hvg.h5ad"
+    gut: "Small_intestine_FIRM_hvg.h5ad"
+    heart: "Heart_FIRM_hvg.h5ad"
+    kidney: "Kidney_FIRM_hvg.h5ad"
+    liver: "Liver_FIRM_hvg.h5ad"
+    lung: "Lung_FIRM_hvg.h5ad"
+    mammary: "Mammary_gland_FIRM_hvg.h5ad"
+    marrow: "Bone_marrow_FIRM_hvg.h5ad"
+    muscle: "Limb_muscle_FIRM_hvg.h5ad"
+    pancreas: "Pancreas_FIRM_hvg.h5ad"
+    skin: "Skin_FIRM_hvg.h5ad"
+    spleen: "Spleen_FIRM_hvg.h5ad"
+    testis: "Testes_FIRM_hvg.h5ad"
+    thymus: "Thymus_FIRM_hvg.h5ad"
+    tongue: "Tongue_FIRM_hvg.h5ad"
+    trachea: "Trachea_FIRM_hvg.h5ad"
+    uterus: "Uterus_FIRM_hvg.h5ad"
+
+  normalisation: "cptt+log"
+  feature_sequences:
+    path: "gene_sequences.fasta.gz"
+    type: "cDNA" 
+
+  cell_annotations:
+    column: 'cell_ontology_class_v1'
+
+    require_subannotation: [
+      'endothelial',
+      'immune cell',
+      'lymphocyte',
+      'stromal cell',
+      'mesenchymal stem cell',
+    ]
+
+    subannotation_kwargs:
+      markers:
+        lymphocyte:
+          'B': ['MS4A1', 'CD79A', 'CD79B', 'CD19']
+          'T': ['TRAC', 'CD3E', 'CD3D', 'CD3G']
+          'NK': ['GZMA', 'NCAM1', 'FCER1G', 'GZMK', 'KLRB1']
+          'macrophage': ['C1QA', 'CD68', 'MARCO', 'CST3']
+          'monocyte': ['PSAP', 'CD14']
+          'neutrophil': ['S100A8', 'S100A9', 'STFA1', 'STFA2']
+          'erythrocyte': ['BETA-S', 'ALAS2', 'HBB-B2', 'TMEM14C']
+          '': ['SNRPF']
+
+        'stromal cell':
+          'pericyte': ['PDGFRB', 'TIMP2']
+          'fibroblast': ['COL1A1', 'COL1A2', 'COL6A2', 'COL3A1', 'COL6A1', 'GPC3',
+                         'HEBP2', 'SVEP1', 'SCARA5', 'C1S', 'C1R', 'C3', 'PODN']
+          'smooth muscle': ['MYH7', 'ACTA2', 'MYL9']
+          '': ['RPL11', 'RPS6', 'PRDX6', 'IFITM1', 'SPARCL1', 'APOE']
+
+        'mesenchymal stem cell':
+          'pericyte': ['PDGFRB', 'TIMP2']
+          'fibroblast': ['COL1A1', 'COL1A2', 'COL6A2', 'COL3A1', 'COL6A1', 'GPC3',
+                         'HEBP2', 'SVEP1', 'SCARA5', 'C1S', 'C1R', 'C3', 'PODN']
+          'smooth muscle': ['MYH7', 'ACTA2', 'MYL9']
+          '': ['RPL11', 'RPS6', 'PRDX6', 'IFITM1', 'SPARCL1', 'APOE']
+
+      bad_prefixes: [
+        'RPL', 'RPS', 'LINC', 'MT', 'EPAS1', 'DYNLL1',
+        'EIF3G', 'HLA-A', 'HLA-B', 'HLA-C', 'HLA-E',
+        'GZMA', 'GNLY', 'CD74', 'KRT4', 'TYROBP',
+        'UBA52', 'LOC1', 'MYBL2', 'MAL', 'ATP5A1', 'ARHGAP15'
+      ]
+
+cell_annotations:
+  rename_dict:
+    cell_types:
+      'erythroid lineage cell': 'erythroid'
+      'unassigned': ''
+      'erythroid progenitor cell': 'erythroid'
+      'cd4-positive, alpha-beta t cell': 'T'
+      'cd8-positive, alpha-beta t cell': 'T'
+      'b cell': 'B'
+      'hematopoietic precursor cell': 'hematopoietic'
+      'natural killer cell': 'NK'
+      'granulocyte monocyte progenitor cell': 'granulocytopoietic'
+      'mature nk t cell': 'NK'
+      't cell': 'T'
+      'myeloid cell': ''
+      'plasmacytoid dendritic cell': 'plasmacytoid'
+      'megakaryocyte progenitor cell': 'megakaryocyte-erythroid'
+      'dendritic cell': 'dendritic'
+      'endothelial cell of sinusoid': 'capillary'
+      'conventional dendritic cell': 'dendritic'
+      'fat cell': 'adipocyte'
+      'enterocyte of epithelium of large intestine': 'enterocyte'
+      'epithelial cell of large intestine': 'epithelial'
+      'mesothelial cell': 'mesothelial'
+      'large intestine goblet cell': 'goblet'
+      'intestinal enteroendocrine cell': 'enteroendocrine'
+      'cell': 'unknown'
+      'vascular associated smooth muscle cell': 'vascular smooth muscle'
+      'endothelial cell': 'capillary'
+      'regular ventricular cardiac myocyte': 'cardiomyocyte'
+      'pericyte cell': 'pericyte'
+      'regular atrial cardiac myocyte': 'cardiomyocyte'
+      'endothelial cell of lymphatic vessel': 'lymphatic'
+      'Purkinje myocyte': 'cardiomyocyte'
+      'mesothelial cell of epicardium': 'mesothelial'
+      'nodal myocyte': 'cardiomyocyte'
+      'vasa recta ascending limb cell': 'capillary'
+      'vasa recta descending limb cell': 'capillary'
+      'kidney proximal convoluted tubule epithelial cell': 'proximal tubule epi'
+      'kidney loop of henle thin descending limb epithelial cell': 'Henle limb epi'
+      'kidney loop of henle thick ascending limb epithelial cell': 'Henle limb epi'
+      'kidney loop of henle thin ascending limb epithelial cell': 'Henle limb epi'
+      'kidney proximal straight tubule epithelial cell': 'proximal tubule epi'
+      'renal alpha-intercalated cell': 'intercalated'
+      'renal beta-intercalated cell': 'intercalated'
+      'glomerular endothelial cell': 'glomerular'
+      'capillary endothelial cell': 'capillary'
+      'epithelial cell of proximal tubule': 'proximal tubule epi'
+      'renal principal cell': 'principal'
+      'myofibroblast cell': 'myofibroblast'
+      'kidney distal convoluted tubule epithelial cell': 'distal tubule epi'
+      'macula densa epithelial cell': 'macula densa'
+      'kidney collecting duct cell': 'collecting duct epi'
+      'renal intercalated cell': 'intercalated'
+      'innate lymphoid cell': 'innate lymphoid'
+      'kidney loop of henle epithelial cell': 'Henle limb epi'
+      'reticular cell': 'reticular'
+      'non-myelinating Schwann cell': 'schwann'
+      'fibroblast of lung': 'fibroblast'
+      'type i pneumocyte': 'AT1'
+      'type ii pneumocyte': 'AT2'
+      'endothelial cell of artery': 'arterial'
+      'vein endothelial cell': 'venous'
+      'lung ciliated cell': 'ciliated'
+      'brush cell of bronchus': 'brush'
+      'club cell': 'club'
+      'basal cell of epithelium of bronchus': 'basal'
+      'myelinating Schwann cell': 'schwann'
+      'pancreatic acinar cell': 'acinar'
+      'pancreatic ductal cell': 'ductal'
+      'pancreatic b cell': 'beta'
+      'pancreatic a cell': 'alpha'
+      'pancreatic d cell': 'delta'
+      'pancreatic pp cell': 'PP'
+      'epithelial cell of exocrine pancreas': 'epithelial'
+      'oral mucosa squamous cell': 'squamous'
+      'skeletal muscle satellite stem cell': 'satellite'
+      'tendon cell': 'tendon'
+      'fast muscle cell': 'striated muscle'
+      'bladder urothelial cell': 'urothelial'
+      'myelinating schwann cell': 'schwann'
+      'non-myelinating schwann cell': 'schwann'
+      'smooth muscle cell': 'smooth muscle'
+      'gabaergic neuron': 'neuron'
+      'glutamatergic neuron': 'neuron'
+      'oligodendrocyte precursor cell': 'opc'
+      'ependymal cell': 'ependymal'
+      'choroid plexus epithelial cell': 'ependymal'
+      'leptomeningeal cell': 'leptomeningeal'
+      'retinal rod cell': 'photoreceptor'
+      'retinal cone cell': 'photoreceptor'
+      'on-bipolar cell': 'bipolar'
+      'off-bipolar cell': 'bipolar'
+      'muller cell': 'muller'
+      'retina horizontal cell': 'horizontal'
+      'retinal bipolar neuron': 'neuron'
+      'epithelial cell': 'epithelial'
+      'enterocyte of epithelium of small intestine': 'enterocyte'
+      'epithelial cell of small intestine': 'epithelial'
+      'small intestine goblet cell': 'goblet'
+      'm cell of gut': 'm'
+      'intestinal tuft cell': 'tuft'
+      'interstitial cell of cajal': 'cajal'
+      'purkinje myocyte': 'cardiomyocyte'
+      'endothelial cell of hepatic sinusoid': 'capillary'
+      'intrahepatic bile duct epithelial cell': 'ductal'
+      'slow muscle cell': 'striated muscle'
+      'basal cell of epidermis': 'basal'
+      'epidermal cell': 'epidermal'
+      'hair follicle cell': 'hair follicular'
+      'epithelial cell of sweat gland': 'sweat'
+      'basal cell of epithelium of trachea': 'basal'
+      'secretory cell': 'mucous'
+      'brush cell of trachea': 'brush'
+      'ciliated cell': 'ciliated'
+      'lung neuroendocrine cell': 'neuroendocrine'
+      'epithelial cell of uterus': 'epithelial'
+      'plasma cell': 'plasma'
+      'unknown': ''
+
+  blacklist:
+    blood: ['epithelial cell']
+    diaphragm: ['lymphocyte', 'mesenchymal stem cell']
+    fat: ['urothelial cell', 'granulosa cell']
+    marrow: ['lymphocyte', 'type ii pneumocyte']
+    heart: ['type ii pneumocyte']
+    kidney: ['stromal cell', 'urothelial cell']
+    lung: ['epithelial cell of uterus']
+    pancreas: ['stromal cell', 'pancreatic endocrine cell']
+    tongue: ['stromal cell', 'pancreatic endocrine cell']
+    thymus: ['lymphocyte']
+
+  cell_supertypes:
+    immune: [
+      'HSC',
+      'hematopoietic',
+      'neutrophil',
+      'basophil',
+      'eosinophil',
+      'granulocytopoietic',
+      'granulocyte',
+      'mast',
+      'myeloid',
+      'monocyte',
+      'alveolar macrophage',
+      'macrophage',
+      'dendritic',
+      'megakaryocyte-erythroid',
+      'erythroid',
+      'erythrocyte',
+      'platelet',
+      'B',
+      'plasma',
+      'T',
+      'NK',
+      'plasmacytoid',
+      'innate lymphoid',
+    ]
+
+    epithelial: [
+      'epithelial',
+      'goblet',
+      'brush',
+      'crypt',
+      'transit amp',
+      'enterocyte',
+      'paneth',
+      'proximal tubule epi',
+      'distal tubule epi',
+      'podocyte',
+      'Henle limb epi',
+      'collecting duct epi',
+      'AT1',
+      'AT2',
+      'club',
+      'ciliated',
+      'ductal',
+      'acinar',
+      'keratinocyte',
+      'basal',
+      'serous',
+      'mucous',
+      'squamous',
+      'tuft',
+      'intercalated',
+      'principal',
+      'macula densa',
+      'urothelial',
+      'ependymal',
+      'm',
+      'epidermal',
+      'hair follicular',
+      'sweat',
+      'melanocyte',
+    ]
+
+    endothelial: [
+      'arterial',
+      'venous',
+      'coronary',
+      'capillary',
+      'CAP2',
+      'lymphatic',
+      'glomerular',
+      'leptomeningeal',
+    ]
+
+    mesenchymal: [
+      'fibroblast',
+      'alveolar fibroblast',
+      'myofibroblast',
+      'cardiomyocyte',
+      'stellate',
+      'tendon',
+      'satellite',
+      'striated muscle',
+      'smooth muscle',
+      'vascular smooth muscle',
+      'pericyte',
+      'mesothelial',
+      'reticular',
+      'preosteoblast',
+      'osteoblast',
+      'adipocyte',
+      'chondrocyte',
+      'cajal',
+    ]
+
+    other: [
+      'neuron',
+      'astrocyte',
+      'oligodendrocyte',
+      'opc',
+      'enteroendocrine',
+      'hepatocyte',
+      'ionocyte',
+      'alpha',
+      'beta',
+      'PP',
+      'delta',
+      'schwann',
+      'muller',
+      'photoreceptor',
+      'bipolar',
+      'horizontal',
+      'spermatid',
+      'spermatocyte',
+      'spermatogonium',
+      'neuroendocrine',
+    ]
+
+  supertype_order: [
+    "immune",
+    "epithelial",
+    "endothelial",
+    "mesenchymal",
+    "other",
+  ]
+

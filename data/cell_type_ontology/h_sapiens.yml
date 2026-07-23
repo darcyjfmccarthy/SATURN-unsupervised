@@ -1,0 +1,733 @@
+measurement_types: [
+  "gene_expression", "chromatin_accessibility"
+]
+
+gene_expression:
+  source: "Tabula Sapiens (https://www.science.org/doi/10.1126/science.abl4896)"
+  path:
+    bladder: "TS_Bladder.h5ad"
+    blood: "TS_Blood.h5ad"
+    marrow: "TS_Bone_Marrow.h5ad"
+    eye: "TS_Eye.h5ad"
+    fat: "TS_Fat.h5ad"
+    heart: "TS_Heart.h5ad"
+    kidney: "TS_Kidney.h5ad"
+    colon: "TS_Large_Intestine.h5ad"
+    liver: "TS_Liver.h5ad"
+    lung: "TS_Lung.h5ad"
+    lymphnode: "TS_Lymph_Node.h5ad"
+    mammary: "TS_Mammary.h5ad"
+    muscle: "TS_Muscle.h5ad"
+    pancreas: "TS_Pancreas.h5ad"
+    prostate: "TS_Prostate.h5ad"
+    salivary: "TS_Salivary_Gland.h5ad"
+    skin: "TS_Skin.h5ad"
+    gut: "TS_Small_Intestine.h5ad"
+    spleen: "TS_Spleen.h5ad"
+    thymus: "TS_Thymus.h5ad"
+    tongue: "TS_Tongue.h5ad"
+    trachea: "TS_Trachea.h5ad"
+    uterus: "TS_Uterus.h5ad"
+
+  normalisation: "to-raw"
+
+  tissues: [
+    'bladder',
+    'blood',
+    'marrow',
+    'eye',
+    'fat',
+    'heart',
+    'kidney',
+    'colon',
+    'liver',
+    'lung',
+    'lymphnode',
+    'mammary',
+    'muscle',
+    'pancreas',
+    'prostate',
+    'salivary',
+    'skin',
+    'gut',
+    'spleen',
+    'thymus',
+    'tongue',
+    'trachea',
+    'uterus',
+  ]
+
+  cell_annotations:
+    column: "cell_ontology_class"
+
+    require_subannotation: [
+      "endothelial",
+      "immune cell",
+      "leucocyte",
+      "mesenchymal stem cell",
+      "stromal cell",
+    ]
+
+    subannotation_kwargs:
+      markers:
+        'immune cell':
+          'T': ['CD3D', 'CD3G', 'CD3E', 'TRAC', 'IL7R']
+          'B': ['MS4A1', 'CD19', 'CD79A']
+          'NK': ['PFN1', 'TMSB4XP8']
+          'macrophage': ['MRC1', 'MARCO', 'CD163', 'C1QA', 'C1QB', 'CST3']
+          'dendritic': ['FCER1A', 'IL1R2', 'CD86', 'HLA-DPB1', 'HLA-DRB1']
+          'neutrophil': ['S100A8', 'S100A7']
+
+        leucocyte:
+          'T': ['CD3D', 'CD3G', 'CD3E', 'TRAC', 'IL7R']
+          'B': ['MS4A1', 'CD19', 'CD79A']
+          'NK': ['PFN1', 'TMSB4XP8']
+          'macrophage': ['MRC1', 'MARCO', 'CD163', 'C1QA', 'C1QB', 'CST3']
+          'dendritic': ['FCER1A', 'IL1R2', 'CD86', 'HLA-DPB1', 'HLA-DRB1']
+          'neutrophil': ['S100A8', 'S100A7']
+          '': ['AL512646.1', 'MAPK10', 'ZBTB20', 'TMSB4X']
+
+        endothelial:
+          'arterial': ['GJA5', 'BMX', 'SEMA3G', 'VIM', 'FN1', 'SRGN']
+          'venous': ['VWF', 'MMRN2', 'CLEC14A', 'ACKR1']
+          'lymphatic': ['LYVE1', 'PROX1', 'THY1', 'MMRN1', 'TFF3', 'TFPI']
+          'capillary': ['SLC9A3R2', 'PLPP1', 'PECAM1', 'IGKC', 'CALD1', 'CRHBP', 'KDR']
+          'epithelial': ['COBLL1', 'EPCAM', 'CD24']
+          '': [
+              'JUN', 'JUND', 'SQSTM1', 'SELENOH', 'FOS', 'ACP1', 'EPB41L2',
+              'MALAT1', 'CAP1', 'FABP5P7', 'XIST', 'TGFBR2', 'SPARCL1',
+              'FCN3', 'F8', 'BTNL9', 'FABP4', 'CFD', 'NEAT1']
+          'acinar': ['PRSS2', 'ENPP2', 'GALNT15', 'APOD', 'CLPS']
+
+        'mesenchymal stem cell':
+          'pericyte': ['PDGFRB', 'TIMP2']
+          'fibroblast': ['COL1A1', 'COL1A2', 'COL6A2', 'COL3A1', 'COL6A1', 'GPC3',
+                         'HEBP2', 'SVEP1', 'SCARA5', 'C1S', 'C1R', 'C3', 'PODN']
+          'smooth muscle': ['MYH7', 'ACTA2', 'MYL9']
+          '': ['RPL11', 'RPS6', 'PRDX6', 'IFITM1', 'SPARCL1', 'APOE']
+
+        'stromal cell':
+          'pericyte': ['PDGFRB', 'TIMP2']
+          'fibroblast': ['COL1A1', 'COL1A2', 'COL6A2', 'COL3A1', 'COL6A1', 'GPC3',
+                         'HEBP2', 'SVEP1', 'SCARA5', 'C1S', 'C1R', 'C3', 'PODN']
+          'smooth muscle': ['MYH7', 'ACTA2', 'MYL9']
+          '': ['RPL11', 'RPS6', 'PRDX6', 'IFITM1', 'SPARCL1', 'APOE']
+
+      bad_prefixes: [
+        'RPL', 'RPS', 'LINC', 'MT', 'EPAS1', 'DYNLL1',
+        'EIF3G', 'HLA-A', 'HLA-B', 'HLA-C', 'HLA-E',
+        'GZMA', 'GNLY', 'CD74', 'KRT4', 'TYROBP', 
+      ]
+
+chromatin_accessibility:
+  source: "Zhang et al. Ren. A single-cell atlas of chromatin accessibility in the human genome (https://doi.org/10.1016/j.cell.2021.10.024)."
+
+  path_global: "Ren_lab_cell_by_cCRE_matrix.h5ad"
+  path_metadata_global: 'Ren_lab_Cell_metadata.tsv.gz'
+  load_params:
+    backed: "r"
+
+  filter_cells_global:
+    metadata: ["Life stage", "==", "Adult"]
+
+  filter_cells:
+    min_cells_per_type: 10
+
+  normalisation: "to-binary"
+
+  tissues: 
+
+  cell_annotations:
+    column: "cell type"
+
+cell_annotations:
+  rename_dict:
+    tissues:
+      'pancreas_SM-IOBHS': 'pancreas'
+      'esophagus_mucosa_SM-AZPYJ': 'esophagus'
+      'esophagus_muscularis_SM-A8CPH': 'esophagus'
+      'artery_aorta_SM-C1PX3': 'heart'
+      'esophagus_muscularis_SM-IQYD1': 'esophagus'
+      'muscle_SM-ADA6L': 'muscle'
+      'esophagus_muscularis_SM-CSSCV': 'esophagus'
+      'muscle_SM-IOBHP': 'muscle'
+      'thyroid_SM-IOBHW': 'thyroid'
+      'thyroid_SM-JF1O4': 'thyroid'
+      'colon_sigmoid_SM-JF1O8': 'colon'
+      'esophagus_mucosa_SM-A9HOR': 'esophagus'
+      'stomach_SM-IOBHV': 'stomach'
+      'heart_lv_SM-IOBHO': 'heart'
+      'artery_aorta_SM-JF1NU': 'heart'
+      'heart_lv_SM-JF1NY': 'heart'
+      'artery_aorta_SM-C1MLC': 'heart'
+      'thyroid_SM-C1MKY': 'thyroid'
+      'LungMap_D231': 'lung'
+      'esophagus_muscularis_SM-IOBHM': 'esophagus'
+      'esophagus_ge_junction_SM-CTD24': 'esophagus'
+      'colon_sigmoid_SM-AZPYO': 'colon'
+      'mammary_tissue_SM-JF1NV': 'mammary'
+      'muscle_SM-C1PWV': 'muscle'
+      'colon_transverse_SM-BZ2ZS': 'colon'
+      'esophagus_mucosa_SM-A9VPA': 'esophagus'
+      'heart_ra_CARE181213_2A': 'heart'
+      'colon_transverse_SM-CSSDA': 'colon'
+      'Human_brain_2': 'brain'
+      'muscle_SM-JF1O9': 'muscle'
+      'heart_rv_CARE181213_2B': 'heart'
+      'mammary_tissue_SM-IOBHL': 'mammary'
+      'adrenal_gland_SM-A8WNO': 'adrenal'
+      'LungMap_D175': 'lung'
+      'colon_transverse_SM-A9HOW': 'colon'
+      'pancreas_SM-JF1NS': 'pancreas'
+      'small_intestine_SM-ADA5F': 'gut'
+      'artery_aorta_SM-CR89M': 'heart'
+      'small_intestine_SM-A62GO': 'gut'
+      'pancreas_SM-ADRUQ': 'pancreas'
+      'muscle_SM-C1MKW': 'muscle'
+      'ovary_SM-IOBHR': 'ovary'
+      'pancreas_SM-JF1O6': 'pancreas'
+      'heart_lv_CARE191122_2D': 'heart'
+      'Human_brain_1': 'brain'
+      'uterus_SM-IOBHX': 'uterus'
+      'heart_atrial_appendage_SM-IOBHN': 'heart'
+      'heart_atrial_appendage_SM-JF1NX': 'heart'
+      'liver_SM-A8WNZ': 'liver'
+      'colon_transverse_SM-A9VP4': 'colon'
+      'colon_transverse_SM-ACCQ1': 'colon'
+      'heart_lv_CARE190307_10D': 'heart'
+      'heart_rv_CARE190307_10B': 'heart'
+      'nerve_tibial_SM-IOBHQ': 'nerve'
+      'heart_lv_CARE191122_3D': 'heart'
+      'heart_la_CARE191122_2C': 'heart'
+      'heart_rv_CARE181125_3B': 'heart'
+      'artery_tibial_SM-IOBHK': ''
+      'lung_SM-JF1NZ': 'lung'
+      'heart_lv_CARE181125_3D': 'heart'
+      'islet_CB3': 'islet'
+      'skin_sun_exposed_SM-JF1NT': 'skin'
+      'LungMap_D122': 'lung'
+      'adipose_omentum_SM-CSSD4': 'fat'
+      'artery_tibial_SM-CHLWW': ''
+      'skin_sun_exposed_SM-ADYHK': 'skin'
+      'skin_sun_exposed_SM-IQYCP': 'skin'
+      'heart_rv_CARE190331_11B': 'heart'
+      'islet_CB1': 'pancreas'
+      'heart_la_CARE190307_10C': 'heart'
+      'vagina_SM-A9HOS': 'vagina'
+      'esophagus_ge_junction_SM-IOERG': 'esophagus'
+      'lung_SM-A8WNH': 'lung'
+      'nerve_tibial_SM-CHLWU': 'nerve'
+      'heart_lv_CARE190331_11D': 'heart'
+      'lung_SM-A62E9': 'lung'
+      'lung_SM-ACCPU': 'lung'
+      'stomach_SM-CHLWL': 'stomach'
+      'heart_la_CARE181125_3C': 'heart'
+      'skin_sun_exposed_SM-IOBHU': 'skin'
+      'adipose_omentum_SM-IOBHJ': 'fat'
+      'islet_CB2': 'pancreas'
+      'skin_SM-JF1O1': 'skin'
+      'adipose_omentum_SM-ADYHB': 'fat'
+      'heart_ra_CARE190307_10A': 'heart'
+      'adipose_omentum_SM-CHZRM': 'fat'
+      'skin_SM-IOBHT': 'skin'
+      'nerve_tibial_SM-CP2V6': 'nerve'
+      'stomach_SM-JF1NP': 'stomach'
+      'small_intestine_SM-JF1O2': 'gut'
+      'stomach_SM-JF1O3': 'stomach'
+      'uterus_SM-A87A2': 'uterus'
+
+    cell_types:
+      'cd24 neutrophil': 'neutrophil'
+      'cd4-positive, alpha-beta t cell': 'T'
+      'cd8-positive, alpha-beta t cell': 'T'
+      'erythroid progenitor': 'erythroid'
+      'nk cell': 'NK'
+      'hematopoietic stem cell': 'HSC'
+      'nampt neutrophil': 'neutrophil'
+      'memory b cell': 'B'
+      'naive b cell': 'B'
+      'myeloid progenitor': 'myeloid'
+      'plasmablast': 'plasma'
+      'enterocyte of epithelium of large intestine': 'enterocyte'
+      'immature enterocyte': 'enterocyte'
+      'paneth cell of epithelium of large intestine': 'paneth'
+      'mature enterocyte': 'enterocyte'
+      'b cell': 'B'
+      'large intestine goblet cell': 'goblet'
+      'transit amplifying cell of large intestine': 'transit amp'
+      'goblet cell': 'goblet'
+      'intestinal crypt stem cell': 'crypt'
+      'intestinal crypt stem cell of large intestine': 'crypt'
+      'intestinal enteroendocrine cell': 'enteroendocrine'
+      'gut endothelial cell': 'endothelial'
+      'mast cell': 'mast'
+      'intestinal tuft cell': 'brush'
+      'cardiac muscle cell': 'cardiomyocyte'
+      'cardiac endothelial cell': 'coronary'
+      'fibroblast of cardiac tissue': 'fibroblast'
+      'smooth muscle cell': 'smooth muscle'
+      'cd4-positive helper t cell': 'T'
+      'kidney epithelial cell': 'epithelial'
+      'endothelial cell': 'endothelial'
+      'type i pneumocyte': 'AT1'
+      'type ii pneumocyte': 'AT2'
+      'basal cell': 'basal'
+      'classical monocyte': 'monocyte'
+      'club cell': 'club'
+      'non-classical monocyte': 'monocyte'
+      'capillary endothelial cell': 'capillary'
+      'respiratory goblet cell': 'goblet'
+      'lung ciliated cell': 'ciliated'
+      'capillary aerocyte': 'CAP2'
+      'vein endothelial cell': 'venous'
+      'lung microvascular endothelial cell': 'capillary'
+      'adventitial cell': 'fibroblast'
+      'dendritic cell': 'dendritic'
+      'intermediate monocyte': 'monocyte'
+      'pericyte cell': 'pericyte'
+      'endothelial cell of artery': 'arterial'
+      'cd4-positive alpha-beta t cell': 'T'
+      'bronchial smooth muscle cell': 'smooth muscle'
+      'vascular associated smooth muscle cell': 'vascular smooth muscle'
+      'cd8-positive alpha-beta t cell': 'T'
+      'endothelial cell of lymphatic vessel': 'lymphatic'
+      'bronchial vessel endothelial cell': 'capillary'
+      'pulmonary ionocyte': 'ionocyte'
+      'plasmacytoid dendritic cell': 'plasmacytoid'
+      'mesothelial cell': 'mesothelial'
+      'serous cell of epithelium of bronchus': 'serous'
+      'myofibroblast cell': 'smooth muscle'
+      'respiratory mucous cell': 'mucous'
+      'pancreatic acinar cell': 'acinar'
+      'pancreatic ductal cell': 'ductal'
+      'myeloid cell': 'myeloid'
+      't cell': 'T'
+      'pancreatic stellate cell': 'stellate'
+      'pancreatic beta cell': 'beta'
+      'pancreatic pp cell': 'PP'
+      'pancreatic alpha cell': 'alpha'
+      'pancreatic delta cell': 'delta'
+      'epithelial cell': 'epithelial'
+      'tongue muscle cell': 'striated muscle'
+      'schwann cell': 'schwann'
+      'bladder urothelial cell': 'urothelial'
+      'cd8-positive, alpha-beta cytokine secreting effector t cell': 'T'
+      'cd4-positive, alpha-beta memory t cell': 'T'
+      'type i nk t cell': 'NK'
+      'naive thymus-derived cd4-positive, alpha-beta t cell': 'T'
+      'cd141-positive myeloid dendritic cell': 'dendritic'
+      'conjunctival epithelial cell': 'conjunctival'
+      'corneal epithelial cell': 'corneal'
+      'eye photoreceptor cell': 'photoreceptor'
+      'corneal keratocyte': 'keratocyte'
+      'retinal blood vessel endothelial cell': 'capillary'
+      'muller cell': 'muller'
+      'lacrimal gland functional unit cell': 'acinar'
+      'microglial cell': 'glial'
+      'radial glial cell': 'glial'
+      'limbal stem cell': 'limbal'
+      'limbal stromal cell': 'limbal'
+      'ocular surface cell': ''
+      'epithelial cell of lacrimal sac': 'lacrimal'
+      'retinal pigment epithelial cell': 'retinal pigment'
+      'retinal bipolar neuron': 'neuron'
+      'erythroid lineage cell': 'erythrocyte'
+      'ciliary body': ''
+      'retina horizontal cell': 'horizontal'
+      'retinal ganglion cell': 'ganglion'
+      'liver dendritic cell': 'dendritic'
+      'endothelial cell of hepatic sinusoid': 'capillary'
+      'intrahepatic cholangiocyte': 'cholangiocyte'
+      'innate lymphoid cell': 'ILC'
+      'regulatory t cell': 'T'
+      'cd8-positive, alpha-beta memory t cell': 'T'
+      'cd1c-positive myeloid dendritic cell': 'dendritic'
+      'mature conventional dendritic cell': 'dendritic'
+      'mature nk t cell': 'NKT'
+      'luminal epithelial cell of mammary gland': 'luminal'
+      'fibroblast of breast': 'fibroblast'
+      'skeletal muscle satellite stem cell': 'satellite'
+      'endothelial cell of vascular tree': 'endothelial'
+      'tendon cell': 'tendon'
+      'fast muscle cell': 'striated muscle'
+      'slow muscle cell': 'striated muscle'
+      'basal cell of prostate epithelium': 'basal'
+      'luminal cell of prostate epithelium': 'luminal'
+      'club cell of prostate epithelium': 'club'
+      'hillock-club cell of prostate epithelium': 'hillock-club'
+      'cd8b-positive nk t cell': 'T'
+      'hillock cell of prostate epithelium': 'hillock-basal'
+      'nkt cell': 'NKT'
+      'acinar cell of salivary gland': 'acinar'
+      'duct epithelial cell': 'ductal'
+      'myoepithelial cell': 'myoepithelial'
+      'muscle cell': 'striated muscle'
+      'cd8-positive, alpha-beta cytotoxic t cell': 'T'
+      'naive thymus-derived cd8-positive, alpha-beta t cell': 'T'
+      'langerhans cell': 'macrophage'
+      'cell of skeletal muscle': 'striated muscle'
+      'enterocyte of epithelium of small intestine': 'enterocyte'
+      'paneth cell of epithelium of small intestine': 'paneth'
+      'small intestine goblet cell': 'goblet'
+      'transit amplifying cell of small intestine': 'transit amp'
+      'intestinal crypt stem cell of small intestine': 'crypt'
+      'dn3 thymocyte': 'thymocyte'
+      'dn1 thymic pro-t cell': 'T'
+      'naive regulatory t cell': 'T'
+      't follicular helper cell': 'T'
+      'medullary thymic epithelial cell': 'mTEC'
+      'immature natural killer cell': 'NK'
+      'dn4 thymocyte': 'thymocyte'
+      'myeloid dendritic cell': 'dendritic'
+      'ciliated cell': 'ciliated'
+      'secretory cell': 'mucous'
+      'mucus secreting cell': 'mucous'
+      'connective tissue cell': 'fibroblast'
+      'tracheal goblet cell': 'goblet'
+      'serous cell of epithelium of trachea': 'serous'
+      'double-positive, alpha-beta thymocyte': 'T'
+      'myometrial cell': 'smooth muscle'
+      'epithelial cell of uterus': 'epithelial'
+      'ciliated epithelial cell': 'ciliated'
+
+      'bladder:nk cell': 'T'
+      'lymphnode:nk cell': 'T'
+      'pancreas:myeloid cell': 'macrophage'
+
+      'transitional zone cortical cell': 'cortical'
+      'zona fasciculata cortical cell': 'cortical'
+      'zona glomerulosa cortical cell': 'cortical'
+      'cortical epithelial-like': 'cortical epi-like'
+      'fibroblast (liver adrenal)': 'fibroblast'
+      'macrophage (general)': 'macrophage'
+      'endothelial (exocrine tissues)': 'capillary'
+      'pericyte (general) 4': 'pericyte'
+      'fibroblast (general)': 'fibroblast'
+      'fibroblast (peripheral nerve)': 'fibroblast'
+      't lymphocyte 1 (cd8+)': 'T'
+      'macrophage (general,alveolar)': 'macrophage'
+      'endothelial cell (general) 1': 'capillary'
+      'lymphatic endothelial cell': 'lymphatic'
+      'schwann cell (general)': 'schwann'
+      'luteal cell (ovarian)': 'luteal'
+      'adipocyte': 'adipocyte'
+      'naive t cell': 'T'
+      'cardiac pericyte 4': 'pericyte'
+      'natural killer t cell': 'NK'
+      'pericyte (general) 3': 'pericyte'
+      'memory b cell': 'B'
+      'cardiac pericyte 3': 'pericyte'
+      't lymphocyte 2 (cd4+)': 'T'
+      'endothelial cell (general) 2': 'capillary'
+      'pericyte (general) 1': 'pericyte'
+      'mast cell': 'mast'
+      'smooth muscle (vaginal)': 'smooth muscle'
+      'vascular smooth muscle 2': 'vascular smooth muscle'
+      'smooth muscle (general)': 'smooth muscle'
+      'cns,enteric neuron': 'neuron'
+      'glutamatergic neuron 1': 'neuron'
+      'glutamatergic neuron 2': 'neuron'
+      'oligodendrocyte': 'oligodendrocyte'
+      'gabaergic neuron 1': 'neuron'
+      'gabaergic neuron 2': 'neuron'
+      'microglia': 'glial'
+      'oligodendrocyte precursor': 'opc'
+      'astrocyte 1': 'astrocyte'
+      'astrocyte 2': 'astrocyte'
+      'blood brain barrier endothelial cell': 'capillary'
+      'cardiac fibroblasts': 'fibroblast'
+      'cardiac pericyte 2': 'pericyte'
+      'endothelial cell (myocardial)': 'capillary'
+      'pericyte (general) 2': 'pericyte'
+      'colon epithelial cell 1': 'epithelial'
+      'small intestinal enterocyte': 'enterocyte'
+      'smooth muscle (colon) 1': 'smooth muscle'
+      'fibroblast (gastrointestinal)': 'fibroblast'
+      'smooth muscle (colon) 2': 'smooth muscle'
+      'colonic goblet cell': 'goblet'
+      'plasma cell': 'plasma'
+      'small intestinal goblet cell': 'goblet'
+      'colon epithelial cell 2': 'epithelial'
+      'colon epithelial cell 3': 'epithelial'
+      'enterochromaffin cell': 'enteroendocrine'
+      'smooth muscle (general gastrointestinal)': 'smooth muscle'
+      'tuft cell': 'tuft'
+      'paneth cell': 'paneth'
+      'smooth muscle (esophageal muscularis) 3': 'smooth muscle'
+      'endothelial cell (general) 3': 'capillary'
+      'pericyte (esophageal muscularis)': 'pericyte'
+      'smooth muscle (esophageal mucosal)': 'smooth muscle'
+      'smooth muscle (ge junction)': 'smooth muscle'
+      'smooth muscle (esophageal muscularis) 1': 'smooth muscle'
+      'smooth muscle (uterine)': 'smooth muscle'
+      'vascular smooth muscle 1': 'vascular smooth muscle'
+      'smooth muscle (esophageal muscularis) 2': 'smooth muscle'
+      'fibroblast (epithelial)': 'fibroblast'
+      'fibroblast (sk muscle associated)': 'fibroblast'
+      'gastric neuroendocrine cell': 'neuroendocrine'
+      'alveolar capillary endothelial cell': 'capillary'
+      'keratinocyte 1': 'keratinocyte'
+      'mesothelial cell': 'mesothelial'
+      'melanocyte': 'melanocyte'
+      'esophageal epithelial cell': 'epithelial'
+      'foveolar cell': 'foveolar'
+      'type i skeletal myocyte': 'striated muscle'
+      'myoepithelial (skin)': 'myoepithelial'
+      'satellite cell': 'satellite'
+      'granular epidermal (skin)': 'epidermal'
+      'basal epidermal (skin)': 'basal'
+      'club cell': 'club'
+      'type ii skeletal myocyte': 'striated muscle'
+      'keratinocyte 2': 'keratinocyte'
+      'chief cell': 'chief'
+      'ventricular cardiomyocyte': 'cardiomyocyte'
+      'atrial cardiomyocyte': 'cardiomyocyte'
+      'cardiac pericyte 1': 'pericyte'
+      'endocardial cell': 'endocardial'
+      'hepatocyte': 'hepatocyte'
+      'alveolar type 2 (at2) cell': 'AT2'
+      'alveolar type 1 (at1) cell': 'AT1'
+      'alverolar type 2,immune': 'alveolar macrophage'
+      'cilliated cell': 'ciliated'
+      'mammary epithelial': 'epithelial'
+      'mammary luminal epithelial cell 1': 'luminal'
+      'basal epithelial (mammary)': 'basal'
+      'mammary luminal epithelial cell 2': 'luminal'
+      'eccrine epidermal (skin)': 'epidermal'
+      'peripheral nerve stromal': 'nerve stromal'
+      'pancreatic acinar cell': 'acinar'
+      'pancreatic beta cell 1': 'beta'
+      'pancreatic alpha cell 1': 'alpha'
+      'ductal cell (pancreatic)': 'ductal'
+      'pancreatic beta cell 2': 'beta'
+      'pancreatic delta,gamma cell': 'PP'
+      'pancreatic alpha cell 2': 'alpha'
+      'parietal cell': 'parietal'
+      'thyroid follicular cell': 'thyrocyte'
+
+  tissue_restricted:
+    'pancreatic alpha cell': ['pancreas']
+    'pancreatic beta cell': ['pancreas']
+    'pancreatic pp cell': ['pancreas']
+    'pancreatic delta cell': ['pancreas']
+    'pancreatic stellate cell': ['pancreas']
+    'ductal cell (pancreatic)': ['pancreas']
+    'pancreatic acinar cell': ['pancreas']
+    'pancreatic delta,gamma cell': ['pancreas']
+    'alveolar type 1 (at1) cell': ['lung']
+    'alveolar type 2 (at2) cell': ['lung']
+    'alverolar type 2,immune': ['lung']
+    'luteal cell (ovarian)': ['ovary']
+    'hepatocyte': ['liver']
+    'mammary luminal epithelial cell 2': ['mammary']
+    'basal epithelial (mammary)': ['mammary']
+    'small intestinal enterocyte': ['gut', 'colon']
+    'chief cell': ['stomach']
+
+  blacklist:
+    'adrenal': [
+      'smooth muscle (vaginal)',
+      'vascular smooth muscle 2',
+      'cns,enteric neuron',
+      'smooth muscle (general)',
+    ]
+
+    'brain': [
+      'peripheral nerve stromal',
+      'smooth muscle (vaginal)',
+    ]
+
+    'colon': [
+    ]
+
+    'esophagus': [
+      'airway goblet cell',
+      'peripheral nerve stromal',
+      'thyroid follicular cell',
+    ]
+
+    'eye': [
+      'endothelial cell',
+    ]
+
+    'fat': [
+      'peripheral nerve stromal',
+    ]
+
+    'gut': [
+      'duodenum glandular cell',
+    ]
+
+    'heart': [
+      'peripheral nerve stromal',
+      'thyroid follicular cell',
+    ]
+
+    'liver': [
+    ]
+
+    'lung': [
+    ]
+
+    'mammary': [
+    ]
+
+    'muscle': [
+      'peripheral nerve stromal',
+    ]
+
+    'nerve': [
+    ]
+
+    'ovary': [
+    ]
+
+    'pancreas': [
+    ]
+
+    'prostate': [
+      'sperm',
+    ]
+
+    'salivary': [
+      'salivary gland cell',
+    ]
+
+    'skin': [
+      'peripheral nerve stromal',
+    ]
+
+    'stomach': [
+    ]
+
+    'thyroid': [
+    ]
+
+    'uterus': [
+    ]
+ 
+    'vagina': [
+    ]
+
+  cell_supertypes:
+    'immune': [
+      'HSC',
+      'neutrophil',
+      'basophil',
+      'granulocyte',
+      'mast',
+      'myeloid',
+      'monocyte',
+      'macrophage',
+      'alveolar macrophage',
+      'dendritic',
+      'erythroid',
+      'erythrocyte',
+      'B',
+      'plasma',
+      'thymocyte',
+      'T',
+      'NK',
+      'NKT',
+      'ILC',
+      'plasmacytoid',
+      'glial',
+      'platelet',
+    ]
+
+    'epithelial': [
+      'epithelial',
+      'goblet',
+      'brush',
+      'crypt',
+      'transit amp',
+      'enterocyte',
+      'paneth',
+      'AT1',
+      'AT2',
+      'hillock-club',
+      'hillock-basal',
+      'club',
+      'ciliated',
+      'ductal',
+      'acinar',
+      'keratinocyte',
+      'basal',
+      'serous',
+      'mucous',
+      'cortical epi-like',
+      'tuft',
+      'melanocyte',
+      'foveolar',
+      'myoepithelial',
+      'chief',
+      'epidermal',
+      'luminal',
+      'parietal',
+      'thyrocyte',
+      'urothelial',
+      'conjunctival',
+      'corneal',
+      'cholangiocyte',
+      'mTEC',
+    ]
+
+    'endothelial': [
+      'arterial',
+      'venous',
+      'coronary',
+      'capillary',
+      'CAP2',
+      'lymphatic',
+      'endocardial',
+    ]
+
+    'mesenchymal': [
+      'fibroblast',
+      'alveolar fibroblast',
+      'cardiomyocyte',
+      'stellate',
+      'tendon',
+      'striated muscle',
+      'smooth muscle',
+      'vascular smooth muscle',
+      'pericyte',
+      'mesothelial',
+      'satellite',
+      'keratocyte',
+      'nerve stromal',
+    ]
+
+    'other': [
+      'enteroendocrine',
+      'neuroendocrine',
+      'hepatocyte',
+      'ionocyte',
+      'alpha',
+      'beta',
+      'PP',
+      'delta',
+      'schwann',
+      'adipocyte',
+      'cortical',
+      'luteal',
+      'neuron',
+      'oligodendrocyte',
+      'opc',
+      'astrocyte',
+      'photoreceptor',
+      'muller',
+      'limbal',
+      'lacrimal',
+      'retinal pigment',
+      'horizontal',
+      'ganglion',
+    ]
+
+  supertype_order: [
+    'immune',
+    'epithelial',
+    'endothelial',
+    'mesenchymal',
+    'other',
+  ]
