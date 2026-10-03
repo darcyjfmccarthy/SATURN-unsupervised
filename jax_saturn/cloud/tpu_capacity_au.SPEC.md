@@ -1,7 +1,8 @@
 # Australia-Preferred TPU Capacity Spec
 
 ## Status
-Draft.
+Runbook and bounded smoke/resume CLI prepared. Actual cloud project, budget,
+quota and TPU execution remain pending; no cloud resources were created.
 
 ## Notebook Scope
 This spec covers the future TPU rental and execution environment for notebook cells 7, 16, 18, 20, and 22. It does not alter notebook analysis or report cells.
@@ -17,7 +18,7 @@ No current repo script provisions cloud resources.
 ## JAX Design Target
 The future JAX workflow should prefer TPU capacity near Australia while remaining realistic about current public TPU availability.
 
-Current public facts checked on 2026-08-08:
+Current public facts rechecked on 2026-10-02:
 - Google Cloud TPU regions and zones page lists no Australia TPU zone.
 - The same page lists APAC v6e in `asia-northeast1-b`.
 - The same page lists APAC v2 in `asia-east1-c`.
@@ -37,8 +38,15 @@ Capacity preference order:
 4. `us-central1-a` v5e Flex-start as broad-capacity fallback.
 
 First TPU target:
-- v6e in Tokyo, single-host smallest practical topology.
+- v6e-1 in Tokyo for the bounded hardware smoke; v6e-4 for a later
+  single-host collective pilot if needed and approved.
 - Use only if quota, price, and availability are acceptable.
+
+Google's current docs recommend Compute Engine for direct TPU VM management;
+the legacy Cloud TPU API is maintained for fixes. See
+`TPU_RUNBOOK.md` for current official sources, setup, three-update smoke,
+separate-process resume, cost accounting and teardown. The candidate runtime
+is pinned in `../requirements-tpu.txt` and is not claimed TPU-verified.
 
 Cheap fallback:
 - v5e Flex-start in a verified supported zone.

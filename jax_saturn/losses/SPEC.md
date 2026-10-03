@@ -1,7 +1,8 @@
 # Losses Spec
 
 ## Status
-Draft.
+Phase 3 pure JAX losses and deterministic CPU fixture parity implemented.
+Training integration and full HMM acceptance remain pending.
 
 ## Notebook Scope
 This spec covers losses and objectives touched by notebook cells 7, 13, 16, 18, 20, 22, and 24.
@@ -60,6 +61,11 @@ ZINB reconstruction:
 - Reconstruction loss per cell: `-sum(log_prob, axis=-1)`.
 - Training reconstruction loss: sum over cells, optionally weighted by inverse label-frequency weights.
 
+Implementation follows scvi's actual `log_zinb_positive` stabilizers (`eps=1e-8`)
+and its count thresholds, rather than dropping eps from the simplified formula
+above. Masked graph losses must avoid zero targets multiplied by negative
+infinity and return finite zero gradients for all-invalid rows.
+
 VAE KL, if enabled later:
 - `kld = -0.5 * sum(1 + log_var - mu^2 - exp(log_var), axis=1)`.
 - Total loss adds `kld_weight * sum(kld)`.
@@ -85,7 +91,9 @@ Cosine similarity:
 
 Triplet mining for labeled baseline:
 - Candidate positives use same label across species, with MNN filtering when `mnn=True`.
-- Candidate negatives use different label within species.
+- Candidate negatives exclude both the anchor and positive label and come from
+  either the anchor's or positive's species, matching the active reference
+  `get_species_triplet_indices` implementation.
 - For cosine similarity, `ap_sim = sim[anchor, positive]` and `an_sim = sim[anchor, negative]`.
 - Miner triplet margin is `ap_sim - an_sim`.
 - Semihard candidates satisfy `0 < ap_sim - an_sim <= margin`.

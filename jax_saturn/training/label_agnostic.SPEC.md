@@ -1,7 +1,9 @@
 # Label-Agnostic Training Spec
 
 ## Status
-Draft.
+CPU InfoNCE, MMD and OT trainers implemented with strict label-free inputs,
+reference CPU graphs, native checkpoint selection and exact resume tests.
+Full HMM scientific parity and accelerator execution remain unverified.
 
 ## Notebook Scope
 This spec covers notebook cells 13, 14, 16, 18, 20, 22, 24, 28, 32, and the report cells that compare label-free trials.

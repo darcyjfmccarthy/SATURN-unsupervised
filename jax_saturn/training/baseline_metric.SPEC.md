@@ -1,7 +1,9 @@
 # Labeled Baseline Metric Training Spec
 
 ## Status
-Draft.
+CPU baseline implemented with reference mining, Adam parity, padded batches,
+AnnData/history output and native checkpoint resume tests. GPU/TPU and full HMM
+scientific parity remain unverified.
 
 ## Notebook Scope
 This spec covers the labeled baseline portion of notebook cell 7 and outputs consumed by cells 24, 28, 32, 33, 34, 35, 36, 37, and 38.
@@ -27,6 +29,13 @@ After pretraining, `train-saturn.py` starts labeled metric learning:
   - `type_of_triplets=semihard` under notebook defaults.
   - `mnn=True` under notebook defaults.
 - Use `TripletMarginLoss` with margin `0.2`.
+
+The active cross-species miner augments each species-prefixed label group with
+MNN matches from other species, retaining duplicate matched indices. It samples
+cross-species positives with replacement. Negatives exclude both anchor and
+positive labels and may belong to either anchor or positive species. Preserve
+these semantics when implementing Phase 5; do not substitute an exhaustive
+positive enumeration or anchor-species-only negatives.
 - Train epochs `1..epochs`.
 - Save intermediate AnnData every `polling_freq` epochs.
 - Save final metric model to `METRIC_MODEL_PATH`.

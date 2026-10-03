@@ -1,7 +1,8 @@
 # Pretraining Spec
 
 ## Status
-Draft.
+Phase 4 CPU pretraining, AnnData output and Orbax resume implemented and tested
+with synthetic atlases. GPU, full HMM and TPU execution remain unverified.
 
 ## Notebook Scope
 This spec covers notebook cell 7 and the pretrain outputs consumed by cells 8, 10, 11, 13, 24, and 31.
@@ -100,3 +101,14 @@ Pretrain checkpoint path:
 ## Open External Facts
 - Whether checkpoint export to `.pt` is required for mixed PyTorch/JAX workflows during transition.
 - Final location for JAX compilation cache on TPU VMs.
+
+## GPU compilation evidence
+
+Full HMM-shaped GPU profiling located an oversized monolithic step in XLA
+priority-fusion analysis. The implementation compiles reconstruction gradients
+per species and regularization separately, sums gradients at unchanged params,
+and applies Adam once per mixed batch. Protein embeddings are runtime buffers.
+The dropout/ranking key schedule and public artifacts are preserved. A full
+HMM-shaped step compiled in 276.469 seconds and ran warm in 0.309 seconds.
+CPU artifact, exact resume and fresh-process next-update tests pass after this
+change. Full HMM scientific acceptance remains a separate verification gate.

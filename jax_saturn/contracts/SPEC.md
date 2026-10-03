@@ -1,7 +1,8 @@
 # Contracts Spec
 
 ## Status
-Draft.
+Artifact validation, Phase 4 pretraining CLI and Orbax epoch save/resume
+implemented. Metric/label-free CLIs and full notebook switching remain pending.
 
 ## Notebook Scope
 This spec covers notebook cells 2, 7, 13, 16, 18, 20, 22, 24, 28, and all report cells that consume outputs from the benchmark directory.
@@ -125,6 +126,11 @@ Current label-free `run_summary.json` notebook contract:
 - `selection_uses_labels`
 - `epochs`
 - `seed`
+
+`selected_epoch` may be 0 when the initial teacher remains the best model.
+Reference trainer diagnostics are permitted alongside these minimum fields.
+Phase 1 validators recognize the diagnostic keys emitted by
+`scripts/train_label_agnostic.py` and reject unrecognized keys.
 
 Current shared evaluator outputs:
 - `comparison.csv`

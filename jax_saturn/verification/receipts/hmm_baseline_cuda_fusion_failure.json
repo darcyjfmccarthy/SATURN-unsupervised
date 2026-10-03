@@ -1,0 +1,66 @@
+{
+  "schema_version": 1,
+  "success": false,
+  "failures": [
+    {
+      "update": 1,
+      "field": "encoder/block_0/dense/kernel",
+      "mismatched_entries": 1,
+      "max_absolute_error": 3.787130117416382e-05,
+      "worst_index": [
+        44,
+        182
+      ],
+      "reference": 0.01020386628806591,
+      "jax": 0.010165994986891747,
+      "reference_adam_first_moment": -2.6921043172478676e-10,
+      "jax_adam_first_moment": -2.1100277081131935e-10
+    }
+  ],
+  "requested_updates": 1,
+  "timestamp_utc": "2026-10-02T07:17:05.031670+00:00",
+  "scope": "Matched baseline Adam updates on sampled real cells with fixed reference triplets and dropout disabled. Does not verify full epochs, candidate mining, scientific quality, or label-free objectives.",
+  "artifact_sha256": "1b5f52e3e83d19ddc759f5b9ab2904c29187e155d00973f686f6c9420be0d0ef",
+  "triplets_sha256": "ae806fd6e3f28efaf8dbdb738d52a4ad1add7c777c6353e550a22343ed8a80d6",
+  "pretrain_checkpoint_sha256": "5055db3f24a47cfe4ee3c462afd821022a2f707580a1ecb23fe4d274ac3a62dc",
+  "atlas_cells": 117104,
+  "checked_cells": 510,
+  "frozen_triplet_count": 575128,
+  "species": [
+    "h_sapiens",
+    "m_murinus",
+    "m_musculus"
+  ],
+  "dimensions": {
+    "macrogenes": 200,
+    "hidden_dim": 256,
+    "model_dim": 256
+  },
+  "batch_size": 512,
+  "seed": 0,
+  "rtol": 0.0001,
+  "atol": 1e-05,
+  "jax_devices": [
+    "cuda:0"
+  ],
+  "reference_device": "cuda",
+  "tf32": false,
+  "reference_padded_batch": true,
+  "elapsed_seconds": 22.77416231099778,
+  "updates": [
+    {
+      "update": 1,
+      "triplets": 170,
+      "cells": 510,
+      "species": [
+        "h_sapiens",
+        "m_murinus",
+        "m_musculus"
+      ],
+      "reference_loss": 0.09415128827095032,
+      "jax_loss": 0.09415128827095032,
+      "max_parameter_absolute_error": 3.787130117416382e-05,
+      "elapsed_seconds": 16.922102381002333
+    }
+  ]
+}

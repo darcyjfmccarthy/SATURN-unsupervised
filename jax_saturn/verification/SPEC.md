@@ -1,7 +1,9 @@
 # Verification Spec
 
 ## Status
-Draft.
+Phases 1–6 static contracts, model/loss CPU parity, baseline mining and all
+label-free objective integrations are implemented with checkpoint resume tests.
+Full HMM scientific acceptance and TPU execution remain pending.
 
 ## Notebook Scope
 This spec covers future tests for notebook cells 7, 13, 16, 18, 20, 22, 24, and report validation cells 28 through 38.
@@ -39,6 +41,9 @@ Future verification layers:
    - `SaturnMetricModule` forward with copied weights against PyTorch.
    - Cosine triplet mining/filtering against PyTorch on fixtures.
    - InfoNCE, MMD, and partial OT against PyTorch on fixtures.
+   - Three consecutive production Adam updates for pretraining, baseline and
+     each label-free objective, with copied weights and matched random inputs.
+   - Padded rows must not affect losses, gradient norms or parameter updates.
 
 3. Tiny integration tests.
    - Use `data/saturn_run_tiny.csv`.
@@ -46,12 +51,18 @@ Future verification layers:
    - Assert output schemas and finite losses.
    - Assert evaluator completes.
 
-4. Defended HMM parity.
+4. Bounded HMM implementation parity.
    - Use `data/human_monkey_mouse.csv`.
    - Match notebook hyperparameters.
-   - Run full pretrain, baseline, `infonce`, `mmd`, and `ot`.
-   - Run existing evaluator.
-   - Compare to PyTorch reference metrics with metric-level tolerances.
+   - Default to two epochs of shared pretraining, then two epochs each of
+     baseline, `infonce`, `mmd`, and `ot`; reuse the shared pretraining checkpoint.
+   - Compare PyTorch and JAX at the same short horizon, using copied starting
+     weights and matched batches/random inputs for numerical update checks.
+   - Check losses, gradients, parameter updates, finite outputs and resume.
+   - Run existing evaluator for diagnostics. Do not compare a short candidate
+     to the completed 20/30-epoch reference as evidence of implementation parity.
+   - Full scientific evaluation is a separate opt-in run using
+     `VALIDATION_PROFILE=full`; it is not required for implementation progress.
 
 5. TPU smoke/resume.
    - Single step compile and train.
@@ -65,23 +76,25 @@ Future verification layers:
    - Start with `hv_genes=2000`, `num_macrogenes=512`, `model_dim=256`.
    - Verify memory, compile time, and artifact schema.
 
-Future test commands should be separate from this SDD step and may be added after specs are accepted.
+Phase 1 test command: `python -m unittest discover -s jax_saturn/verification -p 'test_*.py' -v`.
 
 ## Decisions
 - Use metric parity rather than bitwise parity.
 - Tiny tests gate TPU spending.
-- HMM parity gates 25-species scaling.
+- Bounded HMM implementation parity gates 25-species scaling.
 - Existing evaluator remains the top-level scientific acceptance check.
 - Tests must distinguish CPU preprocessing failures from JAX/TPU training failures.
 
 ## Non-Goals
-- Running tests during this SDD step.
+- Running full HMM or TPU training during Phase 1 contract verification.
 - Requiring exact same UMAP coordinates across PyTorch and JAX.
 - Treating loss curves as exact parity targets.
 - Adding CI for TPU in v1.
 
 ## Acceptance Criteria
-- Future JAX implementation cannot be called HMM-parity-complete until the existing evaluator succeeds.
+- Implementation parity requires matched short-run numerical checks and output
+  contracts. Full HMM scientific acceptance requires the existing evaluator to
+  succeed and must be reported separately; short runs do not establish it.
 - Future tests catch schema drift in public artifacts.
 - Future TPU smoke proves resume before any long Spot/Flex-start run.
 - Future 25-species pilot records memory and runtime diagnostics.

@@ -1,7 +1,18 @@
 # Distributed TPU Spec
 
 ## Status
-Draft.
+Orbax epoch save/resume implemented for CPU pretraining, labeled baseline and
+label-free objectives. Tests cover fresh-process pretrain restoration, adaptive
+weight state and selected parameters. Single-host baseline pmap is implemented
+with two-device CPU checks for global triplets, Adam updates, dropout reuse,
+padding and resume. Single-host pretraining pmap is implemented with global
+valid-count reductions, shared regularizers and epoch resume checks.
+Single-host label-free pmap gathers global embeddings and batch metadata for
+InfoNCE/MMD/OT, with replicated banks/graphs and calibration gradients.
+Actual TPU and multi-host execution remain pending.
+Mixed-precision training policy is implemented through CLI/shell precision
+flags and library model/config options. Short CPU bf16 checks cover every
+stage on one and two devices; accelerator scientific bf16 parity is pending.
 
 ## Notebook Scope
 This spec covers future execution of notebook cells 7, 16, 18, 20, and 22 on TPU capacity. It does not change report or evaluator cells.
@@ -29,6 +40,38 @@ Primary first TPU target:
 - Data-parallel batches sharded over the leading batch axis.
 - Gradient `lax.pmean` across axis name `data`.
 
+Implemented baseline entry point: `--metric-distributed` on
+`scripts/train_saturn_jax.py`, or `METRIC_DISTRIBUTED=1` in the HMM shell.
+`--batch_size` remains the global batch size and must divide local device count.
+Host triplet mining uses the global preview; train steps gather embeddings
+across shards before evaluating triplets and average replica gradients. Preview
+and update fold the same replica index into their shared dropout key. Parameters
+and optimizer state stay replicated throughout training; checkpoint/output
+boundaries use one replica. Execution and local device count are recorded in
+checkpoint configuration, so changing topology on resume is rejected.
+`--expected-local-device-count` fails before preprocessing on a mismatch.
+This flag distributes only the baseline. `--pretrain-distributed` or
+`PRETRAIN_DISTRIBUTED=1` enables pretraining across local devices. Its padded
+per-species batch size must divide the device count. Reconstruction gradients
+use the global valid-cell denominator, then `pmean`; identical ranking and
+regularizer RNGs across replicas retain one shared contribution. Per-species
+gradient programs remain separate, followed by one combined Adam update.
+Pretraining checkpoints record execution/topology and remove replica axes.
+
+Label-free execution uses `--distributed` on its Python CLI or
+`LABEL_DISTRIBUTED=1` in the benchmark shell. Batch size remains global.
+Encoders run on shards; embeddings and valid-row/species/index metadata are
+gathered before computing every objective on the global batch. Banks and teacher
+graphs are replicated runtime buffers. Calibration and updates average replica
+gradients. Parameters, optimizer, RNG and step remain replicated within training;
+adaptive weights and selected-checkpoint statistics retain host precision.
+Epoch boundaries restore the existing public checkpoint and selection format.
+Distributed inference uses `distributed/inference.py` for pretrain exports,
+metric snapshots/final artifacts, label-free banks and selected embeddings.
+Cached pmap kernels take weights dynamically and preserve global observation
+order. Params replicate once per inference pass; fixed global batches shard
+over local devices and returned NumPy arrays omit all padded rows.
+
 Future multi-host target:
 - Multi-host `pmap` first if the code remains simple.
 - `pjit`/GSPMD only after HMM and 25-species pmap runs reveal a memory or scaling limit.
@@ -55,6 +98,14 @@ Dtype policy:
 - Dense matmuls may compute bf16.
 - Losses, reductions, softmax/logsumexp, ZINB, KL, and Sinkhorn compute fp32.
 - Public artifacts are float32 NumPy arrays.
+
+CLI `--mixed-precision` / shell `MIXED_PRECISION` chooses fp32 or bf16. Default
+CLI policy is bf16 for TPU, fp32 for CPU/GPU; library APIs default to fp32.
+The baseline CLI accepts `--pretrain-mixed-precision` separately so an existing
+fp32 pretraining checkpoint can initialize a bf16 baseline without retraining.
+Precision is recorded in checkpoint configuration; changing resumed training
+precision is rejected. Default fp32 baseline/label-free metadata omits the new
+precision field to preserve compatibility with existing native checkpoints.
 
 Compile boundaries:
 - Separate jitted/pmap functions for:

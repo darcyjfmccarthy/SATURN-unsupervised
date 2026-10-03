@@ -1,7 +1,8 @@
 # Models Spec
 
 ## Status
-Draft.
+Phase 2 modules and copied-weight CPU fixture parity implemented. Full HMM
+and TPU bf16 scientific parity remain pending.
 
 ## Notebook Scope
 This spec covers model behavior used by notebook cells 7, 16, 18, 20, and 22.
@@ -24,6 +25,8 @@ The current notebook path uses:
   - `Dense(hidden_dim -> embed_dim)`, LayerNorm, ReLU, Dropout.
 - `px_decoder`: one `full_block` from `embed_dim + num_species + num_batch_labels` to `hidden_dim`.
 - `cl_scale_decoder`: one `full_block` from `hidden_dim` to `num_macrogenes`.
+  This block retains `full_block`'s default dropout 0.1 independently of the
+  model-wide configured dropout.
 - `px_dropout_decoders`: species-specific linear layers from `hidden_dim` to `n_genes_species`.
 - `px_rs`: species-specific trainable log dispersion values, shape `[n_genes_species]`.
 - `p_weights_embeddings`: `full_block(num_macrogenes -> 256)` used by protein-embedding ranking loss.
@@ -58,6 +61,10 @@ For frozen-macrogene metric learning, `train-saturn.py` copies:
 The label-free trainer loads only:
 - `encoder.*`
 - `cl_layer_norm.*`
+
+`SATURNMetricModel.forward` calls only `encoder`; the stored `cl_layer_norm`
+is unused and must not be applied to already-transformed macrogenes.
+Reference LayerNorm uses epsilon 1e-5 and centered variance.
 
 ## JAX Design Target
 Future model implementation uses Flax Linen modules:
@@ -142,6 +149,8 @@ Parity behavior:
 - A later `--fix-species-onehot` flag may use the true sorted species code, but this is outside first parity.
 
 ## Decisions
+- Checkpoint conversion takes independent snapshots of source arrays; subsequent
+  NumPy or PyTorch mutations must not alter converted JAX weights on CPU.
 - Use Flax Linen, not Equinox or Haiku.
 - Use a named parameter tree that is intentionally close to PyTorch state dict names.
 - Keep VAE fields out of first implementation unless needed for checkpoint compatibility. Notebook defaults use `vae=False`.

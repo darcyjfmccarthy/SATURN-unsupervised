@@ -1,7 +1,10 @@
 # JAX SATURN Spec
 
 ## Status
-Draft.
+Implementation started with user authorization. Phases 1–6 host-side contracts,
+Flax models, losses, CPU pretraining, labeled baseline and label-free objectives
+are implemented with parity/integration tests. Full HMM scientific parity and
+TPU execution remain pending.
 
 ## Notebook Scope
 This spec covers the full execution path of `notebooks/human_monkey_mouse.ipynb`, not the whole repository.
@@ -89,7 +92,9 @@ The PyTorch implementation writes the following notebook-visible artifacts:
 The PyTorch code remains the reference implementation for behavior, scientific outputs, and file contracts until JAX parity is explicitly accepted.
 
 ## JAX Design Target
-The future JAX port will be parallel to the existing PyTorch implementation. This SDD pass creates specification files only. It must not add importable code, CLI scripts, package initializers, checkpoint converters, or generated artifacts.
+The JAX port is parallel to the existing PyTorch implementation. The original
+specification-only SDD pass is complete; implementation now follows the phases
+in `migration_plan.SPEC.md`.
 
 Future implementation areas:
 - `jax_saturn/contracts`: CLI and artifact contracts.
@@ -110,10 +115,13 @@ The JAX implementation will use:
 The external notebook-facing outputs must stay compatible with the existing evaluator and report cells.
 
 ## Decisions
-- Use spec-driven development. The current deliverable is this Markdown spec tree, not runnable JAX code.
+- Use spec-driven development. Implement the reviewed migration phases with contract and parity tests.
 - Restrict v1 scope to code touched by `human_monkey_mouse.ipynb`.
 - Keep CPU/scikit-learn/Scanpy preprocessing and evaluation in v1 unless a spec explicitly says otherwise.
 - Treat PyTorch outputs as the scientific reference.
+- Default local implementation validation to two epochs with shared
+  pretraining. Matched short-run numerical checks and artifact/resume contracts
+  allow implementation progress; full scientific runs are explicitly opt-in.
 - Optimize for metric parity, not bitwise parity. Exact random trajectories may differ.
 - Keep the current pretrain model's `spec_idx = 0` species one-hot behavior for first parity. A corrected species one-hot may be added later behind an explicit experiment flag.
 - Add Orbax checkpoints for future JAX training and keep notebook-facing artifacts stable.
@@ -124,10 +132,10 @@ The external notebook-facing outputs must stay compatible with the existing eval
 - Rewriting plotting/report cells.
 - Replacing AnnData, Scanpy, sklearn KNN, or UMAP in v1.
 - Building a production training service.
-- Running training or creating generated artifacts during this SDD step.
+- Running full training or provisioning cloud capacity during Phase 1.
 
 ## Acceptance Criteria
-- The repository contains only Markdown specs under `jax_saturn/`.
+- Phase 1 adds host-side manifest/cache implementations and schema tests under `jax_saturn/`.
 - Each spec uses the shared SDD template:
   - `Status`
   - `Notebook Scope`

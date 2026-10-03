@@ -38,7 +38,10 @@ fine-tuning, evaluates all trials with one frozen post-hoc protocol, and writes
 an executed comparison notebook.
 
 For a presentation-oriented, cell-by-cell version of the same workflow, open
-`notebooks/label_agnostic_benchmark_walkthrough.ipynb` with the `saturn`
-environment. It reuses the canonical completed run by default; set
-`REBUILD_FROM_SCRATCH = True` in its configuration cell to execute all stages
-into `out/label_agnostic_benchmark_walkthrough`.
+`notebooks/human_monkey_mouse.ipynb` with a JAX-capable kernel. It now uses the
+JAX backend and defaults to a fresh run into
+`out/human_monkey_mouse_jax_benchmark_walkthrough`. See
+[the notebook guide](../notebooks/README.md) for dependencies, native checkpoint
+paths and the smoke/report notebooks. For the JAX shell pipeline use
+`VALIDATION_PROFILE=full bash scripts/run_label_agnostic_benchmark_jax.sh`;
+its output directory is `out/human_monkey_mouse_jax_benchmark`.

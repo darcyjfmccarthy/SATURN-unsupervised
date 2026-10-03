@@ -1,7 +1,9 @@
 # Data Spec
 
 ## Status
-Draft.
+Manifest normalization, portable caches, CPU preprocessing and fixed-shape
+pretraining batches implemented through Phase 4. Large-run staging and
+distributed device transfer remain pending.
 
 ## Notebook Scope
 This spec covers notebook cells 5, 7, 13, 14, and the data consumed by cells 24 through 38.
