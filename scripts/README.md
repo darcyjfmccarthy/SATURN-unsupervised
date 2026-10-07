@@ -38,7 +38,8 @@ fine-tuning, evaluates all trials with one frozen post-hoc protocol, and writes
 an executed comparison notebook.
 
 For a presentation-oriented, cell-by-cell version of the same workflow, open
-`notebooks/human_monkey_mouse.ipynb` with a JAX-capable kernel. It now uses the
+`notebooks/pytorch/human_monkey_mouse.ipynb` for the original PyTorch workflow,
+or `notebooks/jax/human_monkey_mouse.ipynb` with a JAX-capable kernel. The latter uses the
 JAX backend and defaults to a fresh run into
 `out/human_monkey_mouse_jax_benchmark_walkthrough`. See
 [the notebook guide](../notebooks/README.md) for dependencies, native checkpoint

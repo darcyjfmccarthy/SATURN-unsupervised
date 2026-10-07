@@ -93,7 +93,7 @@ python scripts/evaluate_label_agnostic_benchmark.py \
 LABEL_AGNOSTIC_OUT="$OUT_DIR" \
   jupyter nbconvert \
     --to notebook \
-    --execute notebooks/label_agnostic_benchmark.ipynb \
+    --execute notebooks/pytorch/label_agnostic_benchmark.ipynb \
     --output-dir "$OUT_DIR" \
     --output "label_agnostic_benchmark.executed.ipynb" \
     --ExecutePreprocessor.timeout=-1

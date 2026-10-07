@@ -1,36 +1,53 @@
-# JAX SATURN notebooks
+# SATURN notebooks
 
-The current benchmark notebooks use the JAX backend:
+Notebooks are separated by training backend:
 
-- `human_monkey_mouse.ipynb`: shared pretraining, labeled baseline, InfoNCE,
-  MMD, OT, evaluation and report figures. Defaults to 20 pretraining epochs and
-  30 metric epochs, with fp32 training on CUDA.
-- `human_monkey_mouse_smoke.ipynb`: the same pipeline with 20 pretraining epochs
-  and 5 metric epochs, plus a repeatability manifest of logical Orbax checkpoint
-  contents and public artifacts. Compare with another JAX smoke run.
-- `label_agnostic_benchmark.ipynb`: plots a completed JAX shell benchmark.
-- `human_monkey_mouse_venous_static.ipynb`: plots a completed JAX walkthrough.
+- `pytorch/`: original notebooks restored from Git commit `27ed84d`, before the
+  JAX migration. These use `train-saturn.py`, `train_label_agnostic.py`, `.pt`
+  model checkpoints, and pickle centroid caches.
+- `jax/`: notebooks from the JAX migration, using JAX trainers, native Orbax
+  checkpoints, and portable NPZ centroid caches.
 
-Use a kernel with the dependencies in `jax_saturn/requirements.txt` and the
-appropriate CUDA or TPU requirements file. Trainers use the kernel's Python
-interpreter. The walkthrough configuration supports `DEVICE` and `DEVICE_NUM`;
-its default is CUDA device 0. Training seeds are passed to the JAX trainers.
+Each directory contains the full `human_monkey_mouse.ipynb` walkthrough, the
+smoke notebook, the static venous plotting notebook, and the completed benchmark
+viewer `label_agnostic_benchmark.ipynb`. The four original PyTorch notebooks were
+restored without modifying their historical contents, including saved outputs.
 
-Checkpoints are native Orbax directories, and centroid caches are portable NPZ
-files. Public AnnData, evaluation artifacts and plotting contracts retain their
-existing formats. Legacy `.pt` protein inputs are converted by the backend;
-these inputs still require PyTorch for conversion.
+## Human, monkey, mouse, frog and fish
 
-The walkthrough writes to `out/human_monkey_mouse_jax_benchmark_walkthrough`.
-Smoke runs write to `out/human_monkey_mouse_jax_benchmark_smoke_runs/<run-id>`.
-The comparison viewer defaults to `out/human_monkey_mouse_jax_benchmark`, matching
-`scripts/run_label_agnostic_benchmark_jax.sh`. Set `HMM_REPORT_SOURCE_DIR` or
-`LABEL_AGNOSTIC_OUT` to inspect another completed run.
+Open [the PyTorch five-species walkthrough](pytorch/human_monkey_mouse_frog_fish.ipynb)
+for the requested experiment. It adds the local frog (`x_laevis`) and zebrafish
+(`d_rerio`) atlases to the three mammalian inputs using
+`data/human_monkey_mouse_frog_fish.csv`. All four trials (baseline, InfoNCE, MMD,
+and OT) fine-tune for **5 epochs**, after **20 pretraining epochs**.
 
-The port was checked statically without executing notebook cells. Saved outputs
-from the previous backend were cleared. Matching artifact contracts do not
-establish identical training trajectories or numerical results.
+The PyTorch copy writes to
+`out/human_monkey_mouse_frog_fish_pytorch_benchmark_walkthrough`.
+The [JAX copy](jax/human_monkey_mouse_frog_fish.ipynb) is retained separately and
+writes to `out/human_monkey_mouse_frog_fish_jax_benchmark_walkthrough`.
+Set `HMMFF_REPORT_SOURCE_DIR` to regenerate either copy's report from a completed
+run using its backend's artifacts.
 
-Older paper vignettes in `Vignettes/` and the protein embedding generation
-notebook are outside the current HMM migration plan. The protein models retain
-their upstream PyTorch implementation.
+Broad-category ontologies are available for the three mammals. Frog and fish
+appear as `unknown` in broad-category plots, and unknown anchor cells are
+excluded from broad-category preservation scores. Fine-label evaluation includes
+all five species.
+
+## Running the notebooks
+
+Use a kernel with the backend's dependencies: the repository `requirements.txt`
+for PyTorch, or `jax_saturn/requirements.txt` and the appropriate CUDA or TPU
+requirements for JAX. Run the PyTorch notebooks from the SATURN Python environment
+so the shell baseline's `python` resolves to that environment. The walkthroughs
+locate the repository by searching parent directories, so either notebook
+subdirectory can be the working directory.
+
+The original full walkthrough defaults to 30 fine-tuning epochs; smoke runs use
+5. CUDA device 0 is the default. Use `HMM_REPORT_SOURCE_DIR` for the original
+three-species report notebooks and `LABEL_AGNOSTIC_OUT` for completed benchmark
+viewers. PyTorch and JAX checkpoints are not interchangeable.
+
+The new five-species notebooks and the JAX migration have been checked
+statically; training has not been executed as part of these changes.
+Older paper vignettes in `Vignettes/` and protein embedding generation notebooks
+remain in their original locations.
