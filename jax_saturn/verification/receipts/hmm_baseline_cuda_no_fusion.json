@@ -1,0 +1,79 @@
+{
+  "schema_version": 1,
+  "success": true,
+  "failures": [],
+  "requested_updates": 3,
+  "timestamp_utc": "2026-10-02T07:19:02.082347+00:00",
+  "scope": "Matched baseline Adam updates on sampled real cells with fixed reference triplets and dropout disabled. Does not verify full epochs, candidate mining, scientific quality, or label-free objectives.",
+  "artifact_sha256": "1b5f52e3e83d19ddc759f5b9ab2904c29187e155d00973f686f6c9420be0d0ef",
+  "triplets_sha256": "ae806fd6e3f28efaf8dbdb738d52a4ad1add7c777c6353e550a22343ed8a80d6",
+  "pretrain_checkpoint_sha256": "5055db3f24a47cfe4ee3c462afd821022a2f707580a1ecb23fe4d274ac3a62dc",
+  "atlas_cells": 117104,
+  "checked_cells": 1516,
+  "frozen_triplet_count": 575128,
+  "species": [
+    "h_sapiens",
+    "m_murinus",
+    "m_musculus"
+  ],
+  "dimensions": {
+    "macrogenes": 200,
+    "hidden_dim": 256,
+    "model_dim": 256
+  },
+  "batch_size": 512,
+  "seed": 0,
+  "rtol": 0.0001,
+  "atol": 1e-05,
+  "jax_devices": [
+    "cuda:0"
+  ],
+  "reference_device": "cuda",
+  "tf32": false,
+  "reference_padded_batch": true,
+  "elapsed_seconds": 12.763401740001427,
+  "updates": [
+    {
+      "update": 1,
+      "triplets": 170,
+      "cells": 510,
+      "species": [
+        "h_sapiens",
+        "m_murinus",
+        "m_musculus"
+      ],
+      "reference_loss": 0.09415128827095032,
+      "jax_loss": 0.09415127336978912,
+      "max_parameter_absolute_error": 1.0991469025611877e-05,
+      "elapsed_seconds": 6.423572051000519
+    },
+    {
+      "update": 2,
+      "triplets": 170,
+      "cells": 509,
+      "species": [
+        "h_sapiens",
+        "m_murinus",
+        "m_musculus"
+      ],
+      "reference_loss": 0.08044499158859253,
+      "jax_loss": 0.08044523000717163,
+      "max_parameter_absolute_error": 1.0998919606208801e-05,
+      "elapsed_seconds": 0.09767781099799322
+    },
+    {
+      "update": 3,
+      "triplets": 170,
+      "cells": 509,
+      "species": [
+        "h_sapiens",
+        "m_murinus",
+        "m_musculus"
+      ],
+      "reference_loss": 0.07480006664991379,
+      "jax_loss": 0.07480040937662125,
+      "max_parameter_absolute_error": 1.099705696105957e-05,
+      "elapsed_seconds": 0.10239779599942267
+    }
+  ]
+}

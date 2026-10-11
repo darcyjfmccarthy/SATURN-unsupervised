@@ -60,6 +60,9 @@ MODEL_TO_SPECIES_TO_GENE_EMBEDDING_PATH = {
 def load_gene_embeddings_adata(adata: AnnData, species: list, embedding_model: str, embedding_path: str = None) -> Tuple[AnnData, Dict[str, torch.FloatTensor]]:
     """Loads gene embeddings for all the species/genes in the provided data.
 
+    Embeddings are loaded onto CPU so files saved on different devices can be
+    combined before the trainer transfers tensors to its selected device.
+
     :param data: An AnnData object containing gene expression data for cells.
     :param species: Species corresponding to this adata
     :param embedding_path: path to gene embeddings to use for given adata, if blank, will use paths set in this file.
@@ -86,7 +89,7 @@ def load_gene_embeddings_adata(adata: AnnData, species: list, embedding_model: s
         species_to_gene_symbol_to_embedding = {
                 species: {
                     gene_symbol.lower(): gene_embedding
-                    for gene_symbol, gene_embedding in torch.load(species_to_gene_embedding_path[species]).items()
+                    for gene_symbol, gene_embedding in torch.load(species_to_gene_embedding_path[species], map_location="cpu").items()
                 }
                 for species in species_names
             }
@@ -95,7 +98,7 @@ def load_gene_embeddings_adata(adata: AnnData, species: list, embedding_model: s
         species_to_gene_symbol_to_embedding = {
             species: {
                 gene_symbol.lower(): gene_embedding
-                for gene_symbol, gene_embedding in torch.load(embedding_path).items()
+                for gene_symbol, gene_embedding in torch.load(embedding_path, map_location="cpu").items()
             }
             for species in species_names
         }
@@ -123,7 +126,7 @@ def load_gene_embeddings_adata(adata: AnnData, species: list, embedding_model: s
 
 
 def load_gene_embeddings_one_species(species: str, embedding_model: str, genes: Union[None, Sequence[str]] = None, embedding_path: Union[str, None] = None):
-    """Load specific embeddings from one species"""
+    """Load specific embeddings from one species onto CPU, regardless of save device."""
     if embedding_path is None:
         # Get embedding paths for the model
         species_to_gene_embedding_path = MODEL_TO_SPECIES_TO_GENE_EMBEDDING_PATH[embedding_model]
@@ -134,9 +137,9 @@ def load_gene_embeddings_one_species(species: str, embedding_model: str, genes: 
             raise ValueError(f'The chosen species does not have gene embeddings: {species}')
 
         # Load gene embeddings for desired species (and convert gene symbols to lower case)
-        embedding_dict = torch.load(species_to_gene_embedding_path[species])
+        embedding_dict = torch.load(species_to_gene_embedding_path[species], map_location="cpu")
     else:
-        embedding_dict = torch.load(embedding_path)
+        embedding_dict = torch.load(embedding_path, map_location="cpu")
 
     if genes is not None:
         embedding_dict = {key: val for key, val in embedding_dict.items() if key in genes}
