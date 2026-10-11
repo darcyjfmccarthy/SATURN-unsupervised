@@ -25,6 +25,10 @@ The PyTorch copy writes to
 `out/human_monkey_mouse_frog_fish_pytorch_benchmark_walkthrough`.
 The [JAX copy](jax/human_monkey_mouse_frog_fish.ipynb) is retained separately and
 writes to `out/human_monkey_mouse_frog_fish_jax_benchmark_walkthrough`.
+For the Google Cloud GPU run, use this JAX copy: it runs **20 shared pretraining
+epochs and 30 fine-tuning epochs per trial**, with **300 macrogenes**, **384 hidden
+dimensions**, and **384 embedding dimensions** (1.5× the original architecture).
+The PyTorch copy retains its 5-epoch configuration.
 Set `HMMFF_REPORT_SOURCE_DIR` to regenerate either copy's report from a completed
 run using its backend's artifacts.
 
