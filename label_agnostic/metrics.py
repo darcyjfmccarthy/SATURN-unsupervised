@@ -3,63 +3,21 @@
 import numpy as np
 import torch
 import torch.nn.functional as F
-from sklearn.neighbors import NearestNeighbors
 
 from .objectives import normalize_numpy
 
 
-def joint_neighbors(embeddings, k=15):
-    embeddings = normalize_numpy(embeddings)
-    local_k = min(k, len(embeddings) - 1)
-    return NearestNeighbors(
-        n_neighbors=local_k + 1, metric="cosine"
-    ).fit(embeddings).kneighbors(
-        embeddings, return_distance=False
-    )[:, 1:]
+# Lazy GPU imports live in NeighborSearch; default metrics remain CPU-only.
+from jax_saturn.data.graphs import joint_neighbors, species_mixing_fraction, topology_recall_at_50
+from jax_saturn.data.neighbors import indices as nearest_indices
 
 
-def species_mixing_fraction(embeddings, species, k=15):
-    species = np.asarray(species).astype(str)
-    neighbors = joint_neighbors(embeddings, k)
-    return float(np.mean(species[neighbors] != species[:, None]))
-
-
-def topology_recall_at_50(
-    embeddings,
-    species,
-    teacher_neighbors,
-    student_k=50,
-):
-    embeddings = normalize_numpy(embeddings)
-    species = np.asarray(species).astype(str)
-    recalls = []
-    for species_name in np.unique(species):
-        global_indices = np.flatnonzero(species == species_name)
-        if len(global_indices) < 2:
-            continue
-        local_k = min(student_k, len(global_indices) - 1)
-        student_local = NearestNeighbors(
-            n_neighbors=local_k + 1, metric="cosine"
-        ).fit(embeddings[global_indices]).kneighbors(
-            embeddings[global_indices], return_distance=False
-        )[:, 1:]
-        student_global = global_indices[student_local]
-        for local_row, global_row in enumerate(global_indices):
-            teacher = set(
-                teacher_neighbors[global_row][
-                    teacher_neighbors[global_row] >= 0
-                ].tolist()
-            )
-            student = set(student_global[local_row].tolist())
-            recalls.append(len(teacher & student) / max(len(teacher), 1))
-    return float(np.mean(recalls)) if recalls else float("nan")
-
-
-def embedding_benchmark_metrics(embeddings, species, labels, k=15):
+def embedding_benchmark_metrics(embeddings, species, labels, k=15, *, search=None, neighbors=None):
     embeddings = normalize_numpy(embeddings)
     species = np.asarray(species).astype(str)
     labels = np.asarray(labels).astype(str)
-    neighbors = joint_neighbors(embeddings, k)
+    if neighbors is None:
+        neighbors = joint_neighbors(embeddings, k, search=search)
     neighbor_species = species[neighbors]
     neighbor_labels = labels[neighbors]
     mixing_per_cell = np.mean(
@@ -76,24 +34,20 @@ def embedding_benchmark_metrics(embeddings, species, labels, k=15):
         if len(global_indices) < 2:
             continue
         local_k = min(k, len(global_indices) - 1)
-        local_neighbors = NearestNeighbors(
-            n_neighbors=local_k + 1, metric="cosine"
-        ).fit(embeddings[global_indices]).kneighbors(
-            embeddings[global_indices], return_distance=False
-        )[:, 1:]
+        local = embeddings[global_indices]
+        local_neighbors = nearest_indices(local, local, local_k, search=search, same=True)
         global_neighbors = global_indices[local_neighbors]
         within_scores[global_indices] = np.mean(
             labels[global_neighbors] == labels[global_indices, None],
             axis=1,
         )
 
-    inverse_simpson = []
-    for row in neighbor_species:
-        probabilities = np.asarray(
-            [(row == value).mean() for value in species_values],
-            dtype=np.float64,
-        )
-        inverse_simpson.append(1.0 / np.sum(probabilities**2))
+    # Float64 proportions retain the original iLISI definition and reduction.
+    inverse_simpson = np.empty(len(embeddings), dtype=np.float64)
+    for start in range(0, len(embeddings), 4096):
+        rows = neighbor_species[start:start + 4096]
+        probabilities = np.mean(rows[:, :, None] == species_values[None, None, :], axis=1)
+        inverse_simpson[start:start + len(rows)] = 1.0 / np.sum(probabilities ** 2, axis=1)
     max_lisi = min(len(species_values), neighbors.shape[1])
     normalized_lisi = (
         (np.asarray(inverse_simpson) - 1.0) / (max_lisi - 1.0)

@@ -2,6 +2,7 @@
 
 from pathlib import Path
 import hashlib
+import time
 from functools import partial
 
 from flax import struct
@@ -16,6 +17,7 @@ from jax_saturn.data.batching import equal_species_batches
 from jax_saturn.distributed.checkpoint import restore_checkpoint, save_checkpoint
 from jax_saturn.losses.core import gene_weight_ranking_loss, l1_loss, zinb_reconstruction_loss
 from jax_saturn.models.saturn import init_pretrain_params
+from jax_saturn.progress import CURRENT_PROGRESS, training_progress
 
 
 @struct.dataclass
@@ -99,6 +101,7 @@ def checkpoint_metadata(module, data, state, config):
             "source_manifest_sha256": data.source_manifest_sha256}
 
 
+@training_progress
 def train_pretrain(module, data, scores, *, output_dir, epochs=20, batch_size=512, learning_rate=.0005,
                    seed=0, l1_penalty=0., pe_sim_penalty=.2, resume=None, devices=None):
     if epochs < 0 or batch_size < 1 or learning_rate <= 0:
@@ -136,13 +139,18 @@ def train_pretrain(module, data, scores, *, output_dir, epochs=20, batch_size=51
                                  l1_penalty=l1_penalty, pe_sim_penalty=pe_sim_penalty)
         state = replicate_state(state, devices)
     for epoch in range(first_epoch, epochs + 1):
+        epoch_started = time.monotonic()
+        first_update_seconds = 0.0
         measurements = []
         species_measurements = [[] for _ in module.species_names]
         for batch in equal_species_batches(data.values, batch_size, seed=seed, epoch=epoch):
             # Only loss inputs cross the device boundary; metadata remains host-side.
             device_batch = tuple({key: jnp.asarray(record[key]) for key in ("values", "valid_mask")} for record in batch)
+            update_started = time.monotonic()
             state, metrics = step(state, device_batch)
             metrics = jax.device_get(metrics)
+            if not measurements:
+                first_update_seconds = time.monotonic() - update_started
             if not all(np.isfinite(value).all() for value in metrics.values()):
                 raise FloatingPointError(f"Nonfinite pretrain loss or gradient at epoch {epoch}")
             measurements.append(metrics)
@@ -158,6 +166,9 @@ def train_pretrain(module, data, scores, *, output_dir, epochs=20, batch_size=51
         path = output_dir / "checkpoints" / f"epoch_{epoch:04d}"
         save_checkpoint(path, checkpoint_state, checkpoint_metadata(module, data, checkpoint_state, config), history=history)
         pd.DataFrame(history).to_csv(output_dir / "pretrain_losses.csv", index=False)
+        CURRENT_PROGRESS.get().event('epoch_complete', objective='pretrain', epoch=epoch,
+            seconds=time.monotonic() - epoch_started, first_update_seconds=first_update_seconds,
+            invocation_first_epoch=(epoch == first_epoch))
         print(f"Pretrain epoch {epoch}: loss={row['loss']:.6f}", flush=True)
     return state if devices is None else unreplicate_state(state), history
 

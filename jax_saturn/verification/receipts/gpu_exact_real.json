@@ -1,0 +1,100 @@
+{
+  "artifact": "/home/darcy/projects/SATURN-unsupervised/out/human_monkey_mouse_frog_fish_jax_benchmark_walkthrough/shared/label_free_artifact.npz",
+  "artifact_sha256": "28cdaeab4400719c452dccc16ed39c54ee14611ca93d8fb87b7901a23e4d95ec",
+  "metric_absolute_differences": {
+    "label_same_neighbor_fraction": 0.0,
+    "normalized_species_ilisi": 0.0,
+    "species_macro_label_same_neighbor_fraction": 0.0,
+    "species_macro_mixing_fraction": 0.0,
+    "species_mixing_fraction": 0.0,
+    "teacher_top15_recall_at_50": 0.0,
+    "within_species_label_same_neighbor_fraction": 0.0
+  },
+  "metric_fixture": "400 real cells/species with original labels2; all reference rows for sampled neighbor queries",
+  "passed": true,
+  "population_shape": [
+    148727,
+    384
+  ],
+  "search": {
+    "backend": "jax",
+    "device": "gpu",
+    "library_version": "0.6.2",
+    "numerical_policy": "cosine-fp32-highest-clip-index-ties-self-exclude-v1",
+    "query_block": 1024,
+    "reference_block": 8192
+  },
+  "search_checks": [
+    {
+      "complete_reference_rows": 148727,
+      "exact_index_rows": 64,
+      "k": 50,
+      "max_distance_error": 7.152557373046875e-07,
+      "non_tied_mismatch_rows": [],
+      "population": "joint",
+      "queries": 64,
+      "tie_classification_distance_tolerance": 1e-05,
+      "tie_or_roundoff_rows": []
+    },
+    {
+      "complete_reference_rows": 2186,
+      "exact_index_rows": 32,
+      "k": 50,
+      "max_distance_error": 4.172325134277344e-07,
+      "non_tied_mismatch_rows": [],
+      "population": "d_rerio",
+      "queries": 32,
+      "tie_classification_distance_tolerance": 1e-05,
+      "tie_or_roundoff_rows": []
+    },
+    {
+      "complete_reference_rows": 51881,
+      "exact_index_rows": 32,
+      "k": 50,
+      "max_distance_error": 5.364418029785156e-07,
+      "non_tied_mismatch_rows": [],
+      "population": "h_sapiens",
+      "queries": 32,
+      "tie_classification_distance_tolerance": 1e-05,
+      "tie_or_roundoff_rows": []
+    },
+    {
+      "complete_reference_rows": 38276,
+      "exact_index_rows": 32,
+      "k": 50,
+      "max_distance_error": 5.364418029785156e-07,
+      "non_tied_mismatch_rows": [],
+      "population": "m_murinus",
+      "queries": 32,
+      "tie_classification_distance_tolerance": 1e-05,
+      "tie_or_roundoff_rows": []
+    },
+    {
+      "complete_reference_rows": 26947,
+      "exact_index_rows": 31,
+      "k": 50,
+      "max_distance_error": 5.364418029785156e-07,
+      "non_tied_mismatch_rows": [],
+      "population": "m_musculus",
+      "queries": 32,
+      "tie_classification_distance_tolerance": 1e-05,
+      "tie_or_roundoff_rows": [
+        15
+      ]
+    },
+    {
+      "complete_reference_rows": 29437,
+      "exact_index_rows": 31,
+      "k": 50,
+      "max_distance_error": 6.556510925292969e-07,
+      "non_tied_mismatch_rows": [],
+      "population": "x_laevis",
+      "queries": 32,
+      "tie_classification_distance_tolerance": 1e-05,
+      "tie_or_roundoff_rows": [
+        10
+      ]
+    }
+  ],
+  "seconds": 9.730176375000156
+}

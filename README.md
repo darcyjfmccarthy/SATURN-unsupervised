@@ -1,5 +1,9 @@
 # SATURN: Uniting Single-cell Gene Expressions with Protein Sequences for Cross-Species Integration
 
+Start here: [canonical from-zero GCP runbook](GCP_RUNBOOK.md).
+
+Reusable GPU experiment workflow, resume/holdout policies and records: [experiment guide](jax_saturn/EXPERIMENT_WORKFLOW.md).
+
 PyTorch implementation of [SATURN](https://www.biorxiv.org/content/10.1101/2023.02.03.526939v1), a deep learning approach that couples gene expression with protein representations learnt using large protein language models for cross-species integration. The key idea in SATURN is to map cells from all datasets to a shared space of functionally related genes that we name macrogenes. Using macrogenes, SATURN is uniquely able to detect functionally related genes co-expressed across species.
 
 <p align="center">

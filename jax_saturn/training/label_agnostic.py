@@ -3,6 +3,7 @@
 from dataclasses import asdict, dataclass
 import json
 import math
+import time
 from pathlib import Path
 
 from flax import struct
@@ -15,6 +16,8 @@ import pandas as pd
 from jax_saturn.contracts.validation import load_npz, validate_metric_history, validate_npz, validate_run_summary
 from jax_saturn.data.batching import metric_batches
 from jax_saturn.data.cache import file_sha256
+from jax_saturn.data.work_cache import WorkCache, array_identity
+from jax_saturn.progress import Progress
 from jax_saturn.data.graphs import (
     build_cross_species_positives, build_preservation_graph, estimate_mmd_bandwidth,
     fused_teacher_view, normalize_numpy, species_mixing_fraction, topology_recall_at_50,
@@ -86,18 +89,34 @@ def _validate_config(config):
         raise ValueError("Invalid label-free weights, seed or transport/selection fractions")
 
 
-def build_graphs(artifact, objective, config):
+def build_graphs(artifact, objective, config, *, search=None, cache=None, artifact_hash=None):
     """Only the four strict artifact fields enter graph construction."""
     names, codes = np.unique(artifact["species"], return_inverse=True)
     if len(names) < 2 or len(codes) >= 2 ** 31:
         raise ValueError("Label-free benchmark requires >=2 species and fewer than 2^31 cells")
-    candidates, probabilities, similarities, neighbors = build_preservation_graph(
-        artifact["embeddings"], artifact["species"], temperature=config.preservation_temperature, seed=config.seed)
+    cache = cache or WorkCache(None)
+    identity = {"artifact_sha256": artifact_hash or array_identity(artifact), "seed": config.seed,
+                "search": search.identity() if search else {"backend": "sklearn", "policy": "legacy-drop-first"},
+                "graph_source_sha256": file_sha256(Path(__file__).parents[1] / "data/graphs.py"),
+                "neighbor_source_sha256": file_sha256(Path(__file__).parents[1] / "data/neighbors.py")}
+    def preservation():
+        values = build_preservation_graph(artifact["embeddings"], artifact["species"],
+            temperature=config.preservation_temperature, seed=config.seed, search=search)
+        return dict(zip(("candidates", "probabilities", "similarities", "neighbors"), values))
+    fixed = cache.get("preservation", {**identity, "neighbor_k": 15, "negative_k": 15,
+        "temperature": config.preservation_temperature}, preservation)
+    candidates, probabilities, similarities, neighbors = [fixed[key] for key in
+        ("candidates", "probabilities", "similarities", "neighbors")]
     positives, positive_coverage = None, None
     if objective == "infonce":
-        positives, positive_names = build_cross_species_positives(
-            artifact["embeddings"], artifact["macrogenes"], artifact["species"],
-            candidate_k=config.candidate_k, positives_per_species=config.positives_per_species)
+        def reciprocal():
+            values, positive_names = build_cross_species_positives(
+                artifact["embeddings"], artifact["macrogenes"], artifact["species"],
+                candidate_k=config.candidate_k, positives_per_species=config.positives_per_species, search=search)
+            return {"positives": values, "species_names": positive_names}
+        positive_cache = cache.get("reciprocal", {**identity, "candidate_k": config.candidate_k,
+            "positives_per_species": config.positives_per_species}, reciprocal)
+        positives, positive_names = positive_cache["positives"], positive_cache["species_names"]
         if not np.array_equal(names, positive_names):
             raise ValueError("Species coding changed during positive mining")
         positive_coverage = float(np.mean(np.any(positives >= 0, axis=(1, 2))))
@@ -110,7 +129,8 @@ def build_graphs(artifact, objective, config):
         mapping[indices] = np.arange(len(indices), dtype=np.int32)
         targets.append(jnp.asarray(indices))
         maps.append(jnp.asarray(mapping))
-    bandwidth = estimate_mmd_bandwidth(fused_teacher_view(artifact["embeddings"], artifact["macrogenes"]), seed=config.seed)
+    bandwidth = float(cache.get("bandwidth", {**identity, "max_cells": 2048}, lambda: {
+        "value": np.asarray(estimate_mmd_bandwidth(fused_teacher_view(artifact["embeddings"], artifact["macrogenes"]), seed=config.seed))})["value"])
     arrays = {"candidates": jnp.asarray(candidates, dtype=jnp.int32), "probabilities": jnp.asarray(probabilities),
               "similarities": jnp.asarray(similarities), "neighbors": jnp.asarray(neighbors, dtype=jnp.int32),
               "positives": None if positives is None else jnp.asarray(positives, dtype=jnp.int32),
@@ -180,7 +200,14 @@ def _device_batch(batch):
     return {key: jnp.asarray(value, dtype=jnp.int32 if key == "global_indices" else None) for key, value in batch.items()}
 
 
-def train_label_free(artifact_path, pretrain_checkpoint, output_dir, *, objective, config=LabelConfig(), resume=None, devices=None):
+def train_label_free(artifact_path, pretrain_checkpoint, output_dir, *, objective, config=LabelConfig(),
+                     resume=None, devices=None, neighbor_search=None, cache_dir=None, progress=None):
+    if progress is None:
+        with Progress(Path(output_dir) / "execution.jsonl") as reporter:
+            return train_label_free(artifact_path, pretrain_checkpoint, output_dir, objective=objective,
+                config=config, resume=resume, devices=devices, neighbor_search=neighbor_search,
+                cache_dir=cache_dir, progress=reporter)
+    cache = WorkCache(cache_dir)
     if objective not in {"infonce", "mmd", "ot"}:
         raise ValueError("Unknown label-free objective")
     _validate_config(config)
@@ -193,7 +220,17 @@ def train_label_free(artifact_path, pretrain_checkpoint, output_dir, *, objectiv
         raise ValueError("Teacher embedding dimension differs from model_dim")
     params, source_metadata = load_pretrain_metric_params(pretrain_checkpoint,
         input_dim=artifact["macrogenes"].shape[1], hidden_dim=config.hidden_dim, model_dim=config.model_dim)
-    names, codes, graphs, neighbors, bandwidth, positive_coverage = build_graphs(artifact, objective, config)
+    artifact_hash = file_sha256(artifact_path)
+    source_hash = directory_sha256(pretrain_checkpoint)
+    progress.event("execution_identity", objective=objective, artifact_sha256=artifact_hash,
+        pretrain_checkpoint_sha256=source_hash, neighbor_search=neighbor_search.identity() if neighbor_search else {"backend": "sklearn", "policy": "legacy-drop-first"},
+        source_files={name:file_sha256(Path(__file__).parents[1]/name) for name in
+                      ("training/label_agnostic.py","data/graphs.py","data/neighbors.py","losses/objectives.py")})
+    with progress.phase("graph_construction", objective=objective):
+        names, codes, graphs, neighbors, bandwidth, positive_coverage = build_graphs(artifact, objective, config,
+            search=neighbor_search, cache=cache, artifact_hash=artifact_hash)
+    for event in cache.events:
+        progress.event("cache", **event)
     if names.tolist() != source_metadata["species_names"]:
         raise ValueError("Artifact species differ from pretrain checkpoint")
     module = SaturnMetricModule(artifact["macrogenes"].shape[1], config.hidden_dim, config.model_dim,
@@ -203,8 +240,6 @@ def train_label_free(artifact_path, pretrain_checkpoint, output_dir, *, objectiv
     hyperparameters.pop("epochs")
     if config.mixed_precision == "fp32":
         hyperparameters.pop("mixed_precision")
-    source_hash = directory_sha256(pretrain_checkpoint)
-    artifact_hash = file_sha256(artifact_path)
     hyperparameters.update(objective=objective, label_free_artifact_sha256=artifact_hash,
                             pretrain_checkpoint_sha256=source_hash, checkpoint_role="epoch")
     if devices is not None:
@@ -219,6 +254,7 @@ def train_label_free(artifact_path, pretrain_checkpoint, output_dir, *, objectiv
                 "species_names": names.tolist(), "input_shapes": {"macrogenes": [config.batch_size, module.input_dim]},
                 "source_manifest_sha256": source_metadata["source_manifest_sha256"]}
 
+    search_kwargs = {} if neighbor_search is None else {"search": neighbor_search}
     step, losses = make_label_step(module, optimizer, objective, graphs, bandwidth, config)
     if devices is not None:
         parallel_step, parallel_calibration = make_label_pmap(module, optimizer, objective, graphs, bandwidth, config, devices)
@@ -228,19 +264,28 @@ def train_label_free(artifact_path, pretrain_checkpoint, output_dir, *, objectiv
         validate_metric_history(pd.DataFrame(history), epochs=int(state.epoch))
     else:
         initial = embed_metric(module, params, artifact["macrogenes"], batch_size=config.batch_size, devices=devices)
-        mixing = species_mixing_fraction(initial, artifact["species"])
-        recall = topology_recall_at_50(initial, artifact["species"], neighbors)
+        def initial_metrics():
+            with progress.phase("initial_evaluation", objective=objective):
+                return {"mixing": np.asarray(species_mixing_fraction(initial, artifact["species"], **search_kwargs)),
+                        "recall": np.asarray(topology_recall_at_50(initial, artifact["species"], neighbors, **search_kwargs))}
+        cached_metrics = cache.get("initial_metrics", {"artifact_sha256": artifact_hash,
+            "pretrain_checkpoint_sha256": source_hash, "search": neighbor_search.identity() if neighbor_search else None,
+            "metric_policy": "mix15-recall50-v1",
+            "metric_source_sha256": file_sha256(Path(__file__).parents[1] / "data/graphs.py")}, initial_metrics)
+        progress.event("cache", **cache.events[-1])
+        mixing, recall = float(cached_metrics["mixing"]), float(cached_metrics["recall"])
         if not np.isfinite(mixing) or not np.isfinite(recall):
             raise ValueError("Initial label-free selection metrics are undefined; species need enough cells for topology evaluation")
         bank = jnp.asarray(normalize_numpy(initial))
         calibration = _device_batch(next(metric_batches(artifact["macrogenes"], codes, config.batch_size, seed=config.seed, epoch=0)))
         next_rng, key = jax.random.split(state.rng)
-        if devices is None:
-            gradients = [jax.jit(jax.grad(lambda p, batch, bank, key, graphs:
-                losses(p, batch, bank, key, graph_arrays=graphs)[position]))(
-                    params, calibration, bank, key, graphs) for position in (0, 1)]
-        else:
-            gradients = parallel_calibration(replicate_training_state(state, devices), calibration, bank)
+        with progress.phase("compilation_calibration", objective=objective):
+            if devices is None:
+                gradients = [jax.jit(jax.grad(lambda p, batch, bank, key, graphs:
+                    losses(p, batch, bank, key, graph_arrays=graphs)[position]))(
+                        params, calibration, bank, key, graphs) for position in (0, 1)]
+            else:
+                gradients = parallel_calibration(replicate_training_state(state, devices), calibration, bank)
         alignment_norm, preservation_norm = [float(optax.global_norm(gradient)) for gradient in gradients]
         weight = float(np.clip(config.preservation_gradient_ratio * alignment_norm / max(preservation_norm, 1e-12), 1e-3, 100.))
         if not np.isfinite(weight) or not np.isfinite(alignment_norm) or not np.isfinite(preservation_norm):
@@ -254,24 +299,38 @@ def train_label_free(artifact_path, pretrain_checkpoint, output_dir, *, objectiv
     output_dir.mkdir(parents=True, exist_ok=True)
     if devices is not None:
         replica_state = replicate_training_state(state, devices)
-    for epoch in range(int(state.epoch) + 1, config.epochs + 1):
-        bank = jnp.asarray(normalize_numpy(embed_metric(module, state.params, artifact["macrogenes"], batch_size=config.batch_size, devices=devices)))
-        batch_metrics = []
-        for batch in metric_batches(artifact["macrogenes"], codes, config.batch_size, seed=config.seed, epoch=epoch):
-            if devices is None:
-                state, metrics = step(state, _device_batch(batch), bank)
-            else:
-                replica_state, metrics = parallel_step(replica_state, _device_batch(batch), bank, state.preservation_weight)
-            metrics = {key: float(value) for key, value in jax.device_get(metrics).items()}
-            if not all(np.isfinite(value) for value in metrics.values()):
-                raise FloatingPointError(f"Nonfinite label-free loss or gradient at epoch {epoch}")
-            batch_metrics.append(metrics)
-        if devices is not None:
-            plain = unreplicate_state(replica_state)
-            state = state.replace(params=plain.params, opt_state=plain.opt_state, rng=plain.rng, step=plain.step)
-        raw = embed_metric(module, state.params, artifact["macrogenes"], batch_size=config.batch_size, devices=devices)
-        mixing = species_mixing_fraction(raw, artifact["species"])
-        recall = topology_recall_at_50(raw, artifact["species"], neighbors)
+    first_epoch = int(state.epoch) + 1
+    for epoch in range(first_epoch, config.epochs + 1):
+        epoch_started = time.monotonic()
+        first_update_seconds = 0.0
+        progress.event("epoch_start", objective=objective, epoch=epoch)
+        with progress.phase("updates", objective=objective, epoch=epoch):
+            bank = jnp.asarray(normalize_numpy(embed_metric(module, state.params, artifact["macrogenes"], batch_size=config.batch_size, devices=devices)))
+            batch_metrics = []
+            for batch_index, batch in enumerate(metric_batches(artifact["macrogenes"], codes, config.batch_size, seed=config.seed, epoch=epoch)):
+                update_started = time.monotonic()
+                if batch_index == 0:
+                    progress.active = "compilation_first_update"
+                    progress.event("stage_start", stage="compilation_first_update", objective=objective, epoch=epoch)
+                if devices is None:
+                    state, metrics = step(state, _device_batch(batch), bank)
+                else:
+                    replica_state, metrics = parallel_step(replica_state, _device_batch(batch), bank, state.preservation_weight)
+                metrics = {key: float(value) for key, value in jax.device_get(metrics).items()}
+                if batch_index == 0:
+                    first_update_seconds = time.monotonic() - update_started
+                    progress.event("stage_end", stage="compilation_first_update", objective=objective, epoch=epoch, seconds=first_update_seconds)
+                    progress.active = "updates"
+                if not all(np.isfinite(value) for value in metrics.values()):
+                    raise FloatingPointError(f"Nonfinite label-free loss or gradient at epoch {epoch}")
+                batch_metrics.append(metrics)
+            if devices is not None:
+                plain = unreplicate_state(replica_state)
+                state = state.replace(params=plain.params, opt_state=plain.opt_state, rng=plain.rng, step=plain.step)
+        with progress.phase("epoch_evaluation", objective=objective, epoch=epoch):
+            raw = embed_metric(module, state.params, artifact["macrogenes"], batch_size=config.batch_size, devices=devices)
+            mixing = species_mixing_fraction(raw, artifact["species"], **search_kwargs)
+            recall = topology_recall_at_50(raw, artifact["species"], neighbors, **search_kwargs)
         if not np.isfinite(mixing) or not np.isfinite(recall):
             raise FloatingPointError("Nonfinite label-free selection metrics")
         feasible = recall >= config.preservation_target
@@ -288,8 +347,12 @@ def train_label_free(artifact_path, pretrain_checkpoint, output_dir, *, objectiv
         history.append(row)
         weight = float(np.clip(state.preservation_weight * math.exp(2 * (config.preservation_target - recall)), 1e-3, 100.))
         state = state.replace(epoch=jnp.int32(epoch), preservation_weight=weight)
-        save_checkpoint(output_dir / "checkpoints" / f"epoch_{epoch:04d}", state, metadata(state), history=history)
-        pd.DataFrame(history).to_csv(output_dir / "metric_history.csv", index=False)
+        with progress.phase("checkpoint_saving", objective=objective, epoch=epoch):
+            save_checkpoint(output_dir / "checkpoints" / f"epoch_{epoch:04d}", state, metadata(state), history=history)
+            pd.DataFrame(history).to_csv(output_dir / "metric_history.csv", index=False)
+        progress.event("epoch_complete", objective=objective, epoch=epoch,
+            seconds=time.monotonic() - epoch_started, first_update_seconds=first_update_seconds,
+            invocation_first_epoch=(epoch == first_epoch))
         print(f"{objective} epoch {epoch}: loss={row['metric_loss']:.6f}, mixing={mixing:.4f}, recall={recall:.4f}", flush=True)
     validate_metric_history(pd.DataFrame(history), epochs=config.epochs)
     final = {"embeddings": embed_metric(module, state.best_params, artifact["macrogenes"], batch_size=config.batch_size, devices=devices),
@@ -328,4 +391,12 @@ def train_label_free(artifact_path, pretrain_checkpoint, output_dir, *, objectiv
                "jax_devices": [str(device) for device in jax.devices()], "global_batch_size": config.batch_size}
     validate_run_summary(summary)
     (output_dir / "run_summary.json").write_text(json.dumps(summary, indent=2, sort_keys=True, allow_nan=False) + "\n")
+    completion = {"schema_version": 1, "epochs": int(state.epoch), "selected_epoch": state.best_epoch,
+        "files": {name: file_sha256(output_dir / name) for name in
+                  ("final_embeddings.npz", "metric_history.csv", "run_summary.json")},
+        "epoch_checkpoint_sha256": directory_sha256(output_dir / "checkpoints" / f"epoch_{int(state.epoch):04d}"),
+        "selected_checkpoint_sha256": directory_sha256(selected_path)}
+    temporary = output_dir / "completion.json.tmp"
+    temporary.write_text(json.dumps(completion, indent=2, sort_keys=True) + "\n")
+    temporary.replace(output_dir / "completion.json")
     return state, history, summary

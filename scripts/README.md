@@ -1,5 +1,20 @@
 # h5ad summarizer
 
+For the strict cell holdout, source `experiments/hmmff_cell_holdout.env` and use
+`run_cell_holdout_jax.py prepare|preflight|run|report`. The fresh-machine bootstrap
+is `bootstrap_cell_holdout_vm.sh`; follow the canonical GCP runbook and preserve
+the initial six-hour deadline across driver reboots.
+
+For the RDEB pilot, run `prepare_disease_cloud_inputs.py`, source
+`experiments/hmmff_rdeb_skin_cell_holdout.env`, and use the same holdout CLI.
+`SATURN_TRIALS=baseline,infonce` selects two methods end to end.
+`validate_disease_holdout.py` exercises a tiny five-species CPU fixture through
+the disease report notebook.
+
+Start here: [canonical from-zero GCP runbook](../GCP_RUNBOOK.md).
+
+Reusable GPU experiment workflow, resume/holdout policies and records: [experiment guide](../jax_saturn/EXPERIMENT_WORKFLOW.md).
+
 Small CLI to print a quick summary of an AnnData `.h5ad` file and optionally
 dump a JSON summary.
 

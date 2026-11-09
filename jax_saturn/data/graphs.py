@@ -1,13 +1,9 @@
-"""CPU-only label-free graph construction, copied from the PyTorch reference helpers.
-
-Source: label_agnostic/objectives.py and label_agnostic/metrics.py.
-These functions deliberately retain reference KNN and sampling behavior.
-"""
+"""Label-free graphs and metrics, with an optional exhaustive GPU backend."""
 
 from itertools import combinations
 
 import numpy as np
-from sklearn.neighbors import NearestNeighbors
+from .neighbors import indices as nearest_indices
 
 
 def normalize_numpy(values):
@@ -27,6 +23,7 @@ def build_preservation_graph(
     negative_k=15,
     temperature=0.1,
     seed=0,
+    *, search=None,
 ):
     """Build fixed same-species topology targets without cell labels."""
     embeddings = normalize_numpy(embeddings)
@@ -45,26 +42,22 @@ def build_preservation_graph(
         if len(global_indices) < 2:
             continue
         local_k = min(neighbor_k, len(global_indices) - 1)
-        local_neighbors = NearestNeighbors(
-            n_neighbors=local_k + 1, metric="cosine"
-        ).fit(embeddings[global_indices]).kneighbors(
-            embeddings[global_indices], return_distance=False
-        )[:, 1:]
+        local = embeddings[global_indices]
+        local_neighbors = nearest_indices(local, local, local_k, search=search, same=True)
         global_neighbors = global_indices[local_neighbors]
         neighbors[global_indices, :local_k] = global_neighbors
 
         for local_anchor, global_anchor in enumerate(global_indices):
             near = global_neighbors[local_anchor]
-            excluded = np.concatenate(([global_anchor], near))
-            negative_pool = global_indices[
-                ~np.isin(global_indices, excluded, assume_unique=False)
-            ]
-            if len(negative_pool):
-                negatives = rng.choice(
-                    negative_pool,
-                    size=min(negative_k, len(negative_pool)),
-                    replace=False,
-                )
+            # Draw ranks from the same ordered pool as the reference. Mapping
+            # around its small exclusion set preserves rng.choice's seeded
+            # draws without rebuilding an O(species_size) pool for every cell.
+            excluded = np.unique(np.concatenate(([local_anchor], local_neighbors[local_anchor])))
+            count = len(global_indices) - len(excluded)
+            if count:
+                ranks = rng.choice(count, size=min(negative_k, count), replace=False)
+                local_negative = ranks + np.searchsorted(excluded - np.arange(len(excluded)), ranks, side="right")
+                negatives = global_indices[local_negative]
             else:
                 negatives = np.empty(0, dtype=np.int64)
             row = np.concatenate((near, negatives))
@@ -91,6 +84,7 @@ def build_cross_species_positives(
     species,
     candidate_k=20,
     positives_per_species=3,
+    *, search=None,
 ):
     """Find reciprocal cross-species neighbours in a fused teacher view."""
     view = fused_teacher_view(embeddings, macrogenes)
@@ -110,12 +104,8 @@ def build_cross_species_positives(
         idx_b = np.flatnonzero(species == species_b)
         k_ab = min(candidate_k, len(idx_b))
         k_ba = min(candidate_k, len(idx_a))
-        ab = NearestNeighbors(
-            n_neighbors=k_ab, metric="cosine"
-        ).fit(view[idx_b]).kneighbors(view[idx_a], return_distance=False)
-        ba = NearestNeighbors(
-            n_neighbors=k_ba, metric="cosine"
-        ).fit(view[idx_a]).kneighbors(view[idx_b], return_distance=False)
+        ab = nearest_indices(view[idx_a], view[idx_b], k_ab, search=search)
+        ba = nearest_indices(view[idx_b], view[idx_a], k_ba, search=search)
         ba_sets = [set(row.tolist()) for row in ba]
         reciprocal_a = [[] for _ in idx_a]
         reciprocal_b = [[] for _ in idx_b]
@@ -150,18 +140,16 @@ def estimate_mmd_bandwidth(embeddings, seed=0, max_cells=2048):
     positive = upper[upper > 0]
     return float(np.median(positive)) if len(positive) else 1.0
 
-def joint_neighbors(embeddings, k=15):
+def joint_neighbors(embeddings, k=15, *, search=None):
     embeddings = normalize_numpy(embeddings)
-    local_k = min(k, len(embeddings) - 1)
-    return NearestNeighbors(
-        n_neighbors=local_k + 1, metric="cosine"
-    ).fit(embeddings).kneighbors(
-        embeddings, return_distance=False
-    )[:, 1:]
+    local_k = min(k, max(len(embeddings) - 1, 0))
+    if local_k == 0:
+        return np.empty((len(embeddings), 0), np.int64)
+    return nearest_indices(embeddings, embeddings, local_k, search=search, same=True)
 
-def species_mixing_fraction(embeddings, species, k=15):
+def species_mixing_fraction(embeddings, species, k=15, *, search=None):
     species = np.asarray(species).astype(str)
-    neighbors = joint_neighbors(embeddings, k)
+    neighbors = joint_neighbors(embeddings, k, search=search)
     return float(np.mean(species[neighbors] != species[:, None]))
 
 def topology_recall_at_50(
@@ -169,6 +157,7 @@ def topology_recall_at_50(
     species,
     teacher_neighbors,
     student_k=50,
+    *, search=None,
 ):
     embeddings = normalize_numpy(embeddings)
     species = np.asarray(species).astype(str)
@@ -178,18 +167,15 @@ def topology_recall_at_50(
         if len(global_indices) < 2:
             continue
         local_k = min(student_k, len(global_indices) - 1)
-        student_local = NearestNeighbors(
-            n_neighbors=local_k + 1, metric="cosine"
-        ).fit(embeddings[global_indices]).kneighbors(
-            embeddings[global_indices], return_distance=False
-        )[:, 1:]
+        local = embeddings[global_indices]
+        student_local = nearest_indices(local, local, local_k, search=search, same=True)
         student_global = global_indices[student_local]
-        for local_row, global_row in enumerate(global_indices):
-            teacher = set(
-                teacher_neighbors[global_row][
-                    teacher_neighbors[global_row] >= 0
-                ].tolist()
-            )
-            student = set(student_global[local_row].tolist())
-            recalls.append(len(teacher & student) / max(len(teacher), 1))
+        for start in range(0, len(global_indices), 4096):
+            teacher = np.sort(teacher_neighbors[global_indices[start:start + 4096]], axis=1)
+            student = student_global[start:start + 4096]
+            # Set semantics also apply to externally supplied duplicate IDs.
+            valid = teacher >= 0
+            valid[:, 1:] &= teacher[:, 1:] != teacher[:, :-1]
+            common = np.any(teacher[:, :, None] == student[:, None, :], axis=2) & valid
+            recalls.extend((common.sum(axis=1) / np.maximum(valid.sum(axis=1), 1)).tolist())
     return float(np.mean(recalls)) if recalls else float("nan")

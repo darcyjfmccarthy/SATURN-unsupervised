@@ -24,6 +24,10 @@ def main():
     parser.add_argument("--distributed", action="store_true", help="Single-host pmap; --batch-size is global")
     parser.add_argument("--expected-local-device-count", type=int)
     parser.add_argument("--validation-profile", choices=["short", "full"], default="short")
+    parser.add_argument("--neighbor-backend", choices=["sklearn", "jax"], default="sklearn")
+    parser.add_argument("--query-block", type=int, default=1024)
+    parser.add_argument("--reference-block", type=int, default=8192)
+    parser.add_argument("--cache-dir", type=Path)
     defaults = LabelConfig()
     for field in fields(defaults):
         value = getattr(defaults, field.name)
@@ -63,10 +67,15 @@ def main():
                       "process_index": jax.process_index(), "process_count": jax.process_count(),
                       "mixed_precision": config.mixed_precision,
                       "execution": "pmap" if args.distributed else "jit"}), flush=True)
+    from jax_saturn.data.neighbors import NeighborSearch
+    search = NeighborSearch(args.neighbor_backend, args.query_block, args.reference_block,
+                            "gpu" if args.device in {"cuda", "gpu"} else "cpu")
+    search.validate_device()
     with jax.default_device(devices[args.device_num]):
         train_label_free(args.artifact, args.pretrain_checkpoint, args.output_dir,
                          objective=args.objective, config=config, resume=args.resume,
-                         devices=local_devices if args.distributed else None)
+                         devices=local_devices if args.distributed else None,
+                         neighbor_search=search if args.neighbor_backend == "jax" else None, cache_dir=args.cache_dir)
 
 
 if __name__ == "__main__":

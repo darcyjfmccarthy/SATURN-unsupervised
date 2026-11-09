@@ -23,6 +23,8 @@ def main():
     parser.add_argument("--num_macrogenes", type=int, default=200)
     parser.add_argument("--model_dim", type=int, default=256)
     parser.add_argument("--hidden_dim", type=int, default=256)
+    parser.add_argument("--preprocessing-out", type=Path,
+                        help="Persist training-fitted gene order for frozen held-out inference")
     parser.add_argument("--validation-profile", choices=["short", "full"], default="short")
     parser.add_argument("--mixed-precision", choices=["fp32", "bf16"],
                         help="Matmul dtype; defaults to bf16 on TPU, fp32 otherwise")
@@ -120,6 +122,9 @@ def main():
     work = Path(args.work_dir)
     data = prepare_data(args.in_data, cache_dir=work / "shared/embedding_cache",
                         hv_genes=args.hv_genes, ref_label_col=args.ref_label_col)
+    if args.preprocessing_out is not None:
+        from jax_saturn.data.holdout import save_fitted_preprocessing
+        save_fitted_preprocessing(data, args.preprocessing_out, hv_genes=args.hv_genes)
     centroid_path = args.centroids_init_path or work / "shared/centroids.npz"
     legacy = centroid_path if centroid_path.suffix == ".pkl" and centroid_path.exists() else None
     if centroid_path.suffix == ".pkl":

@@ -1,5 +1,9 @@
 # JAX SATURN implementation
 
+Start here: [canonical from-zero GCP runbook](../GCP_RUNBOOK.md).
+
+Reusable GPU experiment workflow, resume/holdout policies and records: [experiment guide](EXPERIMENT_WORKFLOW.md).
+
 Phases 1–6 of [the migration plan](migration_plan.SPEC.md) are implemented:
 host-side contracts, Flax models, losses, pretraining, labeled baseline and
 InfoNCE/MMD/OT training with Orbax resume. The PyTorch path remains the scientific

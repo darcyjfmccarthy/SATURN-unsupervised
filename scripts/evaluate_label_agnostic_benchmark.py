@@ -117,7 +117,7 @@ def load_trial(root, trial, truth):
     }
 
 
-def deterministic_umap(embeddings, seed):
+def deterministic_umap(embeddings, seed, model_path=None):
     original_check_array = umap_module.check_array
 
     def compatible_check_array(*values, **kwargs):
@@ -137,17 +137,43 @@ def deterministic_umap(embeddings, seed):
         transform_seed=seed,
         n_jobs=1,
     )
-    return reducer.fit_transform(embeddings)
+    coordinates = reducer.fit_transform(embeddings)
+    if model_path is not None:
+        import pickle
+        temporary = Path(str(model_path) + '.tmp')
+        with temporary.open('wb') as handle:
+            pickle.dump(reducer, handle, protocol=pickle.HIGHEST_PROTOCOL)
+        temporary.replace(model_path)
+    return coordinates
 
 
-def main():
+def _main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--root", required=True)
     parser.add_argument("--truth-adata", required=True)
     parser.add_argument("--triplets", required=True)
     parser.add_argument("--seed", type=int, default=0)
+    parser.add_argument("--save-umap-model", action="store_true",
+                        help="Save the training-fitted reducer for strict held-out transform")
+    parser.add_argument("--neighbor-backend", choices=["sklearn", "jax"], default="sklearn")
+    parser.add_argument("--query-block", type=int, default=1024)
+    parser.add_argument("--reference-block", type=int, default=8192)
+    parser.add_argument("--cache-dir", type=Path)
+    parser.add_argument("--neighbor-device", choices=["cpu", "gpu"], default="gpu")
+    parser.add_argument("--trials", nargs="+", choices=TRIALS, default=list(TRIALS))
     args = parser.parse_args()
+    from jax_saturn.experiments.cell_holdout import parse_trials
+    args.trials = parse_trials(args.trials)
 
+    from jax_saturn.data.neighbors import NeighborSearch
+    from jax_saturn.experiments.report_cache import cached_neighbors
+    from jax_saturn.data.work_cache import WorkCache, array_identity
+    from jax_saturn.progress import Progress
+    import importlib.metadata
+    search = NeighborSearch(args.neighbor_backend,args.query_block,args.reference_block,args.neighbor_device) if args.neighbor_backend == "jax" else None
+    if search is not None:
+        search.validate_device()
+    cache = WorkCache(args.cache_dir)
     root = Path(args.root)
     truth = sc.read_h5ad(args.truth_adata)
     if "labels2" not in truth.obs or "species" not in truth.obs:
@@ -179,8 +205,9 @@ def main():
     )
 
     rows = []
-    for trial in TRIALS:
+    for trial in args.trials:
         trial_dir = root / trial
+        print(f"Evaluating {trial}: exact neighbours, triplets, UMAP, save",flush=True)
         loaded = load_trial(root, trial, truth)
         embeddings = loaded["embeddings"]
         trial_truth = loaded["truth"]
@@ -189,12 +216,34 @@ def main():
             embeddings,
             loaded["species"],
             labels,
-            k=15,
+            k=15, search=search,
+            neighbors=cached_neighbors(embeddings,k=15,search=search,cache_dir=args.cache_dir),
         )
         metrics.update(
             fixed_triplet_margin_loss(embeddings, triplets, margin=0.2)
         )
-        coordinates = deterministic_umap(embeddings, args.seed)
+        umap_identity = {"content":array_identity({"embeddings":embeddings}),
+            "seed":args.seed, "umap":importlib.metadata.version("umap-learn"),
+            "policy":"umap-cosine15-min_dist0.3-n_jobs1-v1"}
+        if args.save_umap_model:
+            from jax_saturn.data.cache import file_sha256
+            from jax_saturn.data.holdout import write_json
+            import pickle
+            model_path = trial_dir / 'training_umap.pkl'
+            model_metadata = trial_dir / 'training_umap_metadata.json'
+            if model_path.exists() and model_metadata.exists():
+                saved = json.loads(model_metadata.read_text())
+                if saved['fit_identity'] != umap_identity or saved['sha256'] != file_sha256(model_path):
+                    raise ValueError(f'Training-fitted UMAP identity changed: {trial}')
+                with model_path.open('rb') as handle:
+                    coordinates = np.asarray(pickle.load(handle).embedding_, np.float32)
+            else:
+                coordinates = deterministic_umap(embeddings, args.seed, model_path=model_path)
+                write_json(model_metadata, {'fit_identity': umap_identity, 'sha256': file_sha256(model_path),
+                    'training_obs_ids': array_identity({'obs_ids': np.asarray(trial_truth.obs_names, str)})})
+        else:
+            coordinates = cache.get("evaluation_umap", umap_identity,
+                lambda:{"coordinates":deterministic_umap(embeddings,args.seed)})["coordinates"]
         evaluated = ad.AnnData(
             X=embeddings,
             obs=trial_truth.obs[
@@ -282,6 +331,13 @@ def main():
     )
     print(summary.to_string(index=False))
     print(json.dumps(acceptance, indent=2, sort_keys=True))
+
+
+def main():
+    from jax_saturn.progress import Progress
+    with Progress() as progress:
+        progress.active = "final_evaluation_and_umap"
+        _main()
 
 
 if __name__ == "__main__":

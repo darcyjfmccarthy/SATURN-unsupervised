@@ -1,0 +1,698 @@
+{
+  "retrieved_on": "2026-11-03",
+  "api": "https://api.cellxgene.cziscience.com/curation/v1",
+  "datasets": {
+    "rdeb_skin": {
+      "assay": [
+        {
+          "label": "10x 3' v3",
+          "ontology_term_id": "EFO:0009922"
+        }
+      ],
+      "assets": [
+        {
+          "filesize": 109182803,
+          "filetype": "H5AD",
+          "url": "https://datasets.cellxgene.cziscience.com/2965d8bb-05c5-40a1-bb03-c0b568cb1919.h5ad"
+        }
+      ],
+      "batch_condition": [
+        "batch"
+      ],
+      "cell_count": 9816,
+      "cell_type": [
+        {
+          "label": "Schwann cell",
+          "ontology_term_id": "CL:0002573"
+        },
+        {
+          "label": "chondrocyte",
+          "ontology_term_id": "CL:0000138"
+        },
+        {
+          "label": "endothelial cell",
+          "ontology_term_id": "CL:0000115"
+        },
+        {
+          "label": "fibroblast",
+          "ontology_term_id": "CL:0000057"
+        },
+        {
+          "label": "fibroblast of lymphatic vessel",
+          "ontology_term_id": "CL:0002554"
+        },
+        {
+          "label": "innate lymphoid cell",
+          "ontology_term_id": "CL:0001065"
+        },
+        {
+          "label": "keratinocyte",
+          "ontology_term_id": "CL:0000312"
+        },
+        {
+          "label": "mast cell",
+          "ontology_term_id": "CL:0000097"
+        },
+        {
+          "label": "neutrophil",
+          "ontology_term_id": "CL:0000775"
+        },
+        {
+          "label": "pericyte",
+          "ontology_term_id": "CL:0000669"
+        },
+        {
+          "label": "professional antigen presenting cell",
+          "ontology_term_id": "CL:0000145"
+        }
+      ],
+      "citation": "Publication: https://doi.org/10.3389/fimmu.2023.1211505 Dataset Version: https://datasets.cellxgene.cziscience.com/2965d8bb-05c5-40a1-bb03-c0b568cb1919.h5ad curated and distributed by CZ CELLxGENE Discover in Collection: https://cellxgene.cziscience.com/collections/f5af7a2f-ab4c-4728-829e-48efb9562105",
+      "collection_doi": "10.3389/fimmu.2023.1211505",
+      "collection_doi_label": "Anderson-Crannage et al. (2023) Front. Immunol.",
+      "collection_id": "f5af7a2f-ab4c-4728-829e-48efb9562105",
+      "collection_name": "Single cell RNA sequencing of paw skin from healthy and Col7a1 knockout (RDEB) mice",
+      "collection_version_id": "6294a2c9-8eaa-4986-9a86-4200a6d9b5b8",
+      "dataset_id": "7be2824e-d62a-42ef-9169-084555c6df87",
+      "dataset_version_id": "2965d8bb-05c5-40a1-bb03-c0b568cb1919",
+      "development_stage": [
+        {
+          "label": "2-week-old stage",
+          "ontology_term_id": "MmusDv:0000141"
+        }
+      ],
+      "disease": [
+        {
+          "label": "epidermolysis bullosa",
+          "ontology_term_id": "MONDO:0006541"
+        },
+        {
+          "label": "normal",
+          "ontology_term_id": "PATO:0000461"
+        }
+      ],
+      "donor_id": [
+        "KO1",
+        "KO2",
+        "WT1",
+        "WT2"
+      ],
+      "explorer_url": "https://cellxgene.cziscience.com/e/7be2824e-d62a-42ef-9169-084555c6df87.cxg/",
+      "genetic_perturbation_strategy": null,
+      "is_pre_analysis": false,
+      "is_primary_data": [
+        true
+      ],
+      "mean_genes_per_cell": 1409.5426854115728,
+      "organism": [
+        {
+          "label": "Mus musculus",
+          "ontology_term_id": "NCBITaxon:10090"
+        }
+      ],
+      "perturbation_types": null,
+      "primary_cell_count": 9816,
+      "processing_status": "SUCCESS",
+      "published_at": "2024-02-15T23:51:08+00:00",
+      "revised_at": "2026-06-11T16:53:21+00:00",
+      "revision_of_collection": null,
+      "revision_of_dataset": null,
+      "schema_version": "7.1.0",
+      "self_reported_ethnicity": [
+        {
+          "label": "na",
+          "ontology_term_id": "na"
+        }
+      ],
+      "sex": [
+        {
+          "label": "unknown",
+          "ontology_term_id": "unknown"
+        }
+      ],
+      "spatial": null,
+      "suspension_type": [
+        "cell"
+      ],
+      "tissue": [
+        {
+          "label": "autopod skin",
+          "ontology_term_id": "UBERON:0015790",
+          "tissue_type": "tissue"
+        }
+      ],
+      "title": "all",
+      "tombstone": false,
+      "visibility": "PUBLIC",
+      "x_approximate_distribution": "COUNT"
+    },
+    "post_flu_lung": {
+      "assay": [
+        {
+          "label": "10x 3' v3",
+          "ontology_term_id": "EFO:0009922"
+        }
+      ],
+      "assets": [
+        {
+          "filesize": 1612876031,
+          "filetype": "H5AD",
+          "url": "https://datasets.cellxgene.cziscience.com/7bd324ca-6071-4e7a-831f-7ad974c3cfaa.h5ad"
+        }
+      ],
+      "cell_count": 123154,
+      "cell_type": [
+        {
+          "label": "B cell",
+          "ontology_term_id": "CL:0000236"
+        },
+        {
+          "label": "T cell",
+          "ontology_term_id": "CL:0000084"
+        },
+        {
+          "label": "adventitial fibroblast",
+          "ontology_term_id": "CL:4052030"
+        },
+        {
+          "label": "alveolar adventitial fibroblast",
+          "ontology_term_id": "CL:4028006"
+        },
+        {
+          "label": "alveolar capillary type 1 endothelial cell",
+          "ontology_term_id": "CL:4028002"
+        },
+        {
+          "label": "alveolar capillary type 2 endothelial cell",
+          "ontology_term_id": "CL:4028003"
+        },
+        {
+          "label": "alveolar macrophage",
+          "ontology_term_id": "CL:0000583"
+        },
+        {
+          "label": "alveolar type 1 fibroblast cell",
+          "ontology_term_id": "CL:4028004"
+        },
+        {
+          "label": "ciliated cell",
+          "ontology_term_id": "CL:0000064"
+        },
+        {
+          "label": "classical monocyte",
+          "ontology_term_id": "CL:0000860"
+        },
+        {
+          "label": "conventional dendritic cell",
+          "ontology_term_id": "CL:0000990"
+        },
+        {
+          "label": "endothelial cell of artery",
+          "ontology_term_id": "CL:1000413"
+        },
+        {
+          "label": "endothelial cell of respiratory system lymphatic vessel",
+          "ontology_term_id": "CL:0009086"
+        },
+        {
+          "label": "fibroblast of lung",
+          "ontology_term_id": "CL:0002553"
+        },
+        {
+          "label": "lung interstitial macrophage",
+          "ontology_term_id": "CL:4033043"
+        },
+        {
+          "label": "mature conventional dendritic cell",
+          "ontology_term_id": "CL:0000841"
+        },
+        {
+          "label": "mesothelial cell of pleura",
+          "ontology_term_id": "CL:1000491"
+        },
+        {
+          "label": "natural killer cell",
+          "ontology_term_id": "CL:0000623"
+        },
+        {
+          "label": "neutrophil",
+          "ontology_term_id": "CL:0000775"
+        },
+        {
+          "label": "non-classical monocyte",
+          "ontology_term_id": "CL:0000875"
+        },
+        {
+          "label": "plasma cell",
+          "ontology_term_id": "CL:0000786"
+        },
+        {
+          "label": "pulmonary alveolar epithelial cell",
+          "ontology_term_id": "CL:0000322"
+        },
+        {
+          "label": "pulmonary alveolar type 1 cell",
+          "ontology_term_id": "CL:0002062"
+        },
+        {
+          "label": "pulmonary alveolar type 2 cell",
+          "ontology_term_id": "CL:0002063"
+        },
+        {
+          "label": "secretory cell",
+          "ontology_term_id": "CL:0000151"
+        },
+        {
+          "label": "vascular associated smooth muscle cell",
+          "ontology_term_id": "CL:0000359"
+        },
+        {
+          "label": "vein endothelial cell",
+          "ontology_term_id": "CL:0002543"
+        }
+      ],
+      "citation": "Publication: https://doi.org/10.1016/j.stem.2024.12.002 Dataset Version: https://datasets.cellxgene.cziscience.com/7bd324ca-6071-4e7a-831f-7ad974c3cfaa.h5ad curated and distributed by CZ CELLxGENE Discover in Collection: https://cellxgene.cziscience.com/collections/606dc65c-ebd8-4f93-ac86-d0789c04863f",
+      "collection_doi": "10.1016/j.stem.2024.12.002",
+      "collection_doi_label": "Niethamer et al. (2025) Cell Stem Cell",
+      "collection_id": "606dc65c-ebd8-4f93-ac86-d0789c04863f",
+      "collection_name": "Mouse Post-Flu Time Series",
+      "collection_version_id": "27746995-7a7e-4d54-a5d4-37918d382bfc",
+      "dataset_id": "89840cec-5734-455d-b68e-34d27650e148",
+      "dataset_version_id": "7bd324ca-6071-4e7a-831f-7ad974c3cfaa",
+      "development_stage": [
+        {
+          "label": "10-week-old stage",
+          "ontology_term_id": "MmusDv:0000156"
+        },
+        {
+          "label": "11-week-old stage",
+          "ontology_term_id": "MmusDv:0000157"
+        },
+        {
+          "label": "12-week-old stage",
+          "ontology_term_id": "MmusDv:0000158"
+        },
+        {
+          "label": "14-month-old stage",
+          "ontology_term_id": "MmusDv:0000085"
+        },
+        {
+          "label": "3-month-old stage",
+          "ontology_term_id": "MmusDv:0000063"
+        },
+        {
+          "label": "4-month-old stage",
+          "ontology_term_id": "MmusDv:0000064"
+        },
+        {
+          "label": "5-month-old stage",
+          "ontology_term_id": "MmusDv:0000069"
+        },
+        {
+          "label": "6-week-old stage",
+          "ontology_term_id": "MmusDv:0000151"
+        },
+        {
+          "label": "7-week-old stage",
+          "ontology_term_id": "MmusDv:0000152"
+        },
+        {
+          "label": "9-week-old stage",
+          "ontology_term_id": "MmusDv:0000155"
+        }
+      ],
+      "disease": [
+        {
+          "label": "influenza",
+          "ontology_term_id": "MONDO:0005812"
+        },
+        {
+          "label": "normal",
+          "ontology_term_id": "PATO:0000461"
+        }
+      ],
+      "donor_id": [
+        "3781",
+        "3833",
+        "4010",
+        "3966",
+        "3784",
+        "3776",
+        "4008",
+        "3978",
+        "5023",
+        "5262",
+        "5572",
+        "5514",
+        "5516",
+        "5515",
+        "5400",
+        "5264",
+        "5457",
+        "5565",
+        "6239",
+        "6099",
+        "6094",
+        "6097",
+        "6093",
+        "6096",
+        "6103"
+      ],
+      "explorer_url": "https://cellxgene.cziscience.com/e/89840cec-5734-455d-b68e-34d27650e148.cxg/",
+      "genetic_perturbation_strategy": null,
+      "is_pre_analysis": false,
+      "is_primary_data": [
+        true
+      ],
+      "mean_genes_per_cell": 2588.684143430177,
+      "organism": [
+        {
+          "label": "Mus musculus",
+          "ontology_term_id": "NCBITaxon:10090"
+        }
+      ],
+      "perturbation_types": null,
+      "primary_cell_count": 123154,
+      "processing_status": "SUCCESS",
+      "published_at": "2025-02-28T22:55:53+00:00",
+      "revised_at": "2026-06-11T16:54:51+00:00",
+      "revision_of_collection": null,
+      "revision_of_dataset": null,
+      "schema_version": "7.1.0",
+      "self_reported_ethnicity": [
+        {
+          "label": "na",
+          "ontology_term_id": "na"
+        }
+      ],
+      "sex": [
+        {
+          "label": "female",
+          "ontology_term_id": "PATO:0000383"
+        },
+        {
+          "label": "male",
+          "ontology_term_id": "PATO:0000384"
+        }
+      ],
+      "spatial": null,
+      "suspension_type": [
+        "cell"
+      ],
+      "tissue": [
+        {
+          "label": "middle lobe of right lung",
+          "ontology_term_id": "UBERON:0002174",
+          "tissue_type": "tissue"
+        }
+      ],
+      "title": "Mouse Post-Flu Time Series",
+      "tombstone": false,
+      "visibility": "PUBLIC",
+      "x_approximate_distribution": null
+    },
+    "sci_microglia": {
+      "assay": [
+        {
+          "label": "10x 3' v2",
+          "ontology_term_id": "EFO:0009899"
+        }
+      ],
+      "assets": [
+        {
+          "filesize": 50762179,
+          "filetype": "H5AD",
+          "url": "https://datasets.cellxgene.cziscience.com/6f840fe3-d40d-4234-9a6c-fa2c4f054ff1.h5ad"
+        }
+      ],
+      "cell_count": 5178,
+      "cell_type": [
+        {
+          "label": "macrophage",
+          "ontology_term_id": "CL:0000235"
+        },
+        {
+          "label": "mature NK T cell",
+          "ontology_term_id": "CL:0000814"
+        },
+        {
+          "label": "mature microglial cell",
+          "ontology_term_id": "CL:0002629"
+        },
+        {
+          "label": "microglial cell",
+          "ontology_term_id": "CL:0000129"
+        }
+      ],
+      "citation": "Publication: https://doi.org/10.1038/s41467-022-33184-1 Dataset Version: https://datasets.cellxgene.cziscience.com/6f840fe3-d40d-4234-9a6c-fa2c4f054ff1.h5ad curated and distributed by CZ CELLxGENE Discover in Collection: https://cellxgene.cziscience.com/collections/3aff0465-9ec0-4a90-9673-71b6b32de532",
+      "collection_doi": "10.1038/s41467-022-33184-1",
+      "collection_doi_label": "Matson et al. (2022) Nat Commun",
+      "collection_id": "3aff0465-9ec0-4a90-9673-71b6b32de532",
+      "collection_name": "Single cell atlas of spinal cord injury in mice reveals a pro-regenerative signature in spinocerebellar neurons.",
+      "collection_version_id": "26a0a43d-d753-458c-919d-1f7b821c6267",
+      "dataset_id": "8ef59750-b336-4240-a9ee-d9dedb30558c",
+      "dataset_version_id": "6f840fe3-d40d-4234-9a6c-fa2c4f054ff1",
+      "development_stage": [
+        {
+          "label": "3-6 month-old mature stage",
+          "ontology_term_id": "MmusDv:0000137"
+        }
+      ],
+      "disease": [
+        {
+          "label": "normal",
+          "ontology_term_id": "PATO:0000461"
+        },
+        {
+          "label": "spinal cord injury",
+          "ontology_term_id": "MONDO:0043797"
+        }
+      ],
+      "donor_id": [
+        "A-45",
+        "A-46",
+        "A-48",
+        "B-49",
+        "B-50",
+        "B-51",
+        "C-41",
+        "C-42",
+        "C-44",
+        "D-25",
+        "D-26",
+        "D-29",
+        "F-12",
+        "F-13",
+        "F-14"
+      ],
+      "explorer_url": "https://cellxgene.cziscience.com/e/8ef59750-b336-4240-a9ee-d9dedb30558c.cxg/",
+      "genetic_perturbation_strategy": null,
+      "is_pre_analysis": false,
+      "is_primary_data": [
+        false
+      ],
+      "mean_genes_per_cell": 371.4478563151796,
+      "organism": [
+        {
+          "label": "Mus musculus",
+          "ontology_term_id": "NCBITaxon:10090"
+        }
+      ],
+      "perturbation_types": null,
+      "primary_cell_count": 0,
+      "processing_status": "SUCCESS",
+      "published_at": "2026-01-06T20:41:10+00:00",
+      "revised_at": "2026-06-11T16:52:25+00:00",
+      "revision_of_collection": null,
+      "revision_of_dataset": null,
+      "schema_version": "7.1.0",
+      "self_reported_ethnicity": [
+        {
+          "label": "na",
+          "ontology_term_id": "na"
+        }
+      ],
+      "sex": [
+        {
+          "label": "female",
+          "ontology_term_id": "PATO:0000383"
+        }
+      ],
+      "spatial": null,
+      "suspension_type": [
+        "nucleus"
+      ],
+      "tissue": [
+        {
+          "label": "spinal cord",
+          "ontology_term_id": "UBERON:0002240",
+          "tissue_type": "tissue"
+        }
+      ],
+      "title": "Microglia",
+      "tombstone": false,
+      "visibility": "PUBLIC",
+      "x_approximate_distribution": null
+    },
+    "masld_liver": {
+      "assay": [
+        {
+          "label": "10x 3' v3",
+          "ontology_term_id": "EFO:0009922"
+        }
+      ],
+      "assets": [
+        {
+          "filesize": 336272129,
+          "filetype": "H5AD",
+          "url": "https://datasets.cellxgene.cziscience.com/e0ed3121-4cd3-4773-8764-831f9b8e9ab2.h5ad"
+        }
+      ],
+      "batch_condition": [
+        "donor_id"
+      ],
+      "cell_count": 21715,
+      "cell_type": [
+        {
+          "label": "B cell",
+          "ontology_term_id": "CL:0000236"
+        },
+        {
+          "label": "CD4-positive, alpha-beta T cell",
+          "ontology_term_id": "CL:0000624"
+        },
+        {
+          "label": "CD8-positive, alpha-beta T cell",
+          "ontology_term_id": "CL:0000625"
+        },
+        {
+          "label": "Kupffer cell",
+          "ontology_term_id": "CL:0000091"
+        },
+        {
+          "label": "cholangiocyte",
+          "ontology_term_id": "CL:1000488"
+        },
+        {
+          "label": "dendritic cell",
+          "ontology_term_id": "CL:0000451"
+        },
+        {
+          "label": "endothelial cell",
+          "ontology_term_id": "CL:0000115"
+        },
+        {
+          "label": "hematopoietic cell",
+          "ontology_term_id": "CL:0000988"
+        },
+        {
+          "label": "hepatocyte",
+          "ontology_term_id": "CL:0000182"
+        },
+        {
+          "label": "interneuron",
+          "ontology_term_id": "CL:0000099"
+        },
+        {
+          "label": "macrophage",
+          "ontology_term_id": "CL:0000235"
+        },
+        {
+          "label": "monocyte",
+          "ontology_term_id": "CL:0000576"
+        },
+        {
+          "label": "natural killer cell",
+          "ontology_term_id": "CL:0000623"
+        },
+        {
+          "label": "neuron associated cell",
+          "ontology_term_id": "CL:0000095"
+        }
+      ],
+      "citation": "Publication: https://doi.org/10.1016/j.cmet.2026.08.015 Dataset Version: https://datasets.cellxgene.cziscience.com/e0ed3121-4cd3-4773-8764-831f9b8e9ab2.h5ad curated and distributed by CZ CELLxGENE Discover in Collection: https://cellxgene.cziscience.com/collections/9a85c2f4-ba6b-4b7a-afc4-b3e2ec99c17c",
+      "collection_doi": "10.1016/j.cmet.2026.08.015",
+      "collection_doi_label": "Zhang et al. (2026) Cell Metabolism",
+      "collection_id": "9a85c2f4-ba6b-4b7a-afc4-b3e2ec99c17c",
+      "collection_name": "Zonated Cholesterol Sensing by SIRT2 Drives MASLD-HCC",
+      "collection_version_id": "bb6b0c0b-c3de-41e9-8053-3d61b7c57c6a",
+      "dataset_id": "e9de826e-54ed-49a2-9b0c-18598c0fa65e",
+      "dataset_version_id": "e0ed3121-4cd3-4773-8764-831f9b8e9ab2",
+      "development_stage": [
+        {
+          "label": "6-month-old stage",
+          "ontology_term_id": "MmusDv:0000077"
+        }
+      ],
+      "disease": [
+        {
+          "label": "hepatocellular carcinoma",
+          "ontology_term_id": "MONDO:0007256"
+        },
+        {
+          "label": "metabolic dysfunction-associated steatohepatitis",
+          "ontology_term_id": "MONDO:0007027"
+        },
+        {
+          "label": "normal",
+          "ontology_term_id": "PATO:0000461"
+        }
+      ],
+      "donor_id": [
+        "pooled_LoxP-Chow",
+        "pooled_LoxP-HHH-NT",
+        "pooled_LoxP-HHH-T",
+        "pooled_SIRT2-KO-HHH"
+      ],
+      "explorer_url": "https://cellxgene.cziscience.com/e/e9de826e-54ed-49a2-9b0c-18598c0fa65e.cxg/",
+      "genetic_perturbation_strategy": null,
+      "is_pre_analysis": false,
+      "is_primary_data": [
+        true
+      ],
+      "mean_genes_per_cell": 2031.96002763067,
+      "organism": [
+        {
+          "label": "Mus musculus",
+          "ontology_term_id": "NCBITaxon:10090"
+        }
+      ],
+      "perturbation_types": [
+        "diet"
+      ],
+      "primary_cell_count": 21715,
+      "processing_status": "SUCCESS",
+      "published_at": "2026-09-21T19:33:47+00:00",
+      "revised_at": null,
+      "revision_of_collection": null,
+      "revision_of_dataset": null,
+      "schema_version": "7.1.0",
+      "self_reported_ethnicity": [
+        {
+          "label": "na",
+          "ontology_term_id": "na"
+        }
+      ],
+      "sex": [
+        {
+          "label": "unknown",
+          "ontology_term_id": "unknown"
+        }
+      ],
+      "spatial": null,
+      "suspension_type": [
+        "cell"
+      ],
+      "tissue": [
+        {
+          "label": "liver",
+          "ontology_term_id": "UBERON:0002107",
+          "tissue_type": "tissue"
+        }
+      ],
+      "title": "Mouse liver cancer single-cell RNA-seq",
+      "tombstone": false,
+      "visibility": "PUBLIC",
+      "x_approximate_distribution": null
+    }
+  }
+}

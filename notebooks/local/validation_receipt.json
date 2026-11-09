@@ -1,0 +1,55 @@
+{
+  "focused_unit_tests_passed": 7,
+  "fresh_download": {
+    "bytes": 109182803,
+    "dataset_version_id": "2965d8bb-05c5-40a1-bb03-c0b568cb1919",
+    "empty_cache_download_verified": true,
+    "sha256": "74d0d79ad6b44af4f0c2b4d5df726600b4017444bbdd1ca1956b320884549d49"
+  },
+  "model_training_executed": false,
+  "original_atlas_and_protein_files_unchanged": true,
+  "preparation_source_sha256": "e9e9616fb12d1c1de1102bf2cc56ff4e7a06bad12d3b3cb5e7be542ccd118932",
+  "presets": {
+    "post_flu_lung": {
+      "all_matrix_rows_validated": true,
+      "all_output_checksums_verified": true,
+      "augmented_five_species_cells": 271881,
+      "donor_isolation_verified": true,
+      "donors_by_condition": {
+        "disease": 23,
+        "healthy": 2
+      },
+      "execution_sha256": "1e1d911ada9557709eefe9d23a64e75af6eb3be520f18b48ca4c36ed344863e7",
+      "live_api": true,
+      "notebook": "out/disease_pilot/post_flu_lung/executed_preparation.ipynb",
+      "preparation_record_sha256": "6e57482782480896d834ab126c0931df17ff947ad7aaf889995ada6e79ee8c5a",
+      "prepared_external_cells": 123154,
+      "qc_excluded": 0,
+      "raw_counts_retained_separately": true,
+      "reference_identities_and_feature_order_verified": true,
+      "shared_mouse_genes": 15101,
+      "study_covariates_preserved": true
+    },
+    "rdeb_skin": {
+      "all_matrix_rows_validated": true,
+      "all_output_checksums_verified": true,
+      "augmented_five_species_cells": 158543,
+      "donor_isolation_verified": true,
+      "donors_by_condition": {
+        "disease": 2,
+        "healthy": 2
+      },
+      "execution_sha256": "287c2cfe06c08b481c0cec1b6270f566a5e930b2d5f7390735968787d124f12a",
+      "live_api": true,
+      "notebook": "notebooks/local/disease_cellxgene_preparation.ipynb",
+      "preparation_record_sha256": "780228119295325b0b9c6e8d5b332110054895032ecbedcadfb0ff3458991b45",
+      "prepared_external_cells": 9816,
+      "qc_excluded": 0,
+      "raw_counts_retained_separately": true,
+      "reference_identities_and_feature_order_verified": true,
+      "shared_mouse_genes": 15316,
+      "study_covariates_preserved": true
+    }
+  },
+  "validated_at_utc": "2026-11-03T12:02:38.789454+00:00"
+}

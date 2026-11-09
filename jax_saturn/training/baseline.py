@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+import time
 from pathlib import Path
 from functools import partial
 
@@ -20,6 +21,7 @@ from jax_saturn.losses.core import normalize, triplet_margin_loss
 from jax_saturn.models.saturn import SaturnMetricModule
 from jax_saturn.models.precision import matmul_dtype, resolve_precision
 from .mining import cross_species_candidates, filter_triplets, normalize_numpy, pad_triplets
+from jax_saturn.progress import CURRENT_PROGRESS, training_progress
 
 
 @struct.dataclass
@@ -92,6 +94,7 @@ def emit_metric_anndata(module, params, pretrain_adata, path, *, batch_size=512,
     return result
 
 
+@training_progress
 def train_baseline(pretrain_params, pretrain_adata, *, output_dir, checkpoint_dir=None,
                    epochs=30, batch_size=512, learning_rate=.001, hidden_dim=256,
                    model_dim=256, seed=0, margin=.2, polling_freq=5,
@@ -146,8 +149,11 @@ def train_baseline(pretrain_params, pretrain_adata, *, output_dir, checkpoint_di
         preview, step = make_metric_pmap(module, optimizer, devices, margin=margin)
         state = replicate_state(state, devices)
     for epoch in range(first_epoch, epochs + 1):
+        epoch_started = time.monotonic()
+        first_update_seconds = 0.0
         losses, candidates, active, mined = [], 0, 0, 0
         for batch in metric_batches(macros, species_codes, batch_size, seed=seed, epoch=epoch, labels=labels, ref_labels=refs):
+            update_started = time.monotonic()
             values = jnp.asarray(batch["macrogenes"])
             count = int(batch["valid_mask"].sum())
             embeddings = normalize_numpy(np.asarray(preview(state, values))[:count])
@@ -166,6 +172,8 @@ def train_baseline(pretrain_params, pretrain_adata, *, output_dir, checkpoint_di
             state, metrics = step(state, values, tuple(jnp.asarray(x) for x in padded), jnp.asarray(mask))
             if not all(np.isfinite(np.asarray(x)).all() for x in metrics.values()):
                 raise FloatingPointError(f"Nonfinite metric loss or gradient at epoch {epoch}")
+            if not losses:
+                first_update_seconds = time.monotonic() - update_started
             losses.append(float(metrics["loss"]))
         history.append({"epoch": epoch, "metric_loss": float(np.mean(losses)), "cross_metric_loss": float(np.mean(losses)),
                         "cross_candidate_triplets": candidates, "cross_active_triplets": active,
@@ -178,6 +186,9 @@ def train_baseline(pretrain_params, pretrain_adata, *, output_dir, checkpoint_di
         if epoch % polling_freq == 0:
             emit_metric_anndata(module, checkpoint_state.params, pretrain_adata, output_dir / f"adata_epoch_{epoch}.h5ad", batch_size=batch_size, devices=devices)
         print(f"Metric epoch {epoch}: loss={history[-1]['metric_loss']:.6f}, candidates={candidates}, active={active}", flush=True)
+        CURRENT_PROGRESS.get().event('epoch_complete', objective='baseline', epoch=epoch,
+            seconds=time.monotonic() - epoch_started, first_update_seconds=first_update_seconds,
+            invocation_first_epoch=(epoch == first_epoch))
     if devices is not None:
         state = unreplicate_state(state)
     validate_metric_history(pd.DataFrame(history), epochs=epochs)

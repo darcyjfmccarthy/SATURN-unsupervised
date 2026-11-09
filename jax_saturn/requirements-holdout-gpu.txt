@@ -1,0 +1,21 @@
+# Direct scientific/report dependencies from the verified five-species GPU run.
+-r requirements-cuda.txt
+numpy==1.26.4
+pandas==2.3.3
+anndata==0.11.4
+scanpy==1.11.5
+scipy==1.15.3
+scikit-learn==1.7.2
+scikit-misc==0.5.3
+h5py==3.16.0
+matplotlib==3.10.9
+seaborn==0.13.2
+umap-learn==0.5.12
+numba==0.68.0
+PyYAML==6.0.3
+plotly==7.1.0
+nbclient==0.10.4
+nbformat==5.11.1
+nbconvert==7.17.1
+ipykernel==7.3.0
+psutil==7.2.2

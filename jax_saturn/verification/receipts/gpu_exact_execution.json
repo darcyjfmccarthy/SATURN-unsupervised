@@ -1,0 +1,207 @@
+{
+  "cloud_actions_performed": [],
+  "environment": {
+    "cloud_access": "None during implementation, testing and packaging",
+    "cuda_compiler_pin": "12.6.85, compatible with the laptop CUDA 12.7 driver; base conda environment unchanged",
+    "gpu": "NVIDIA GeForce RTX 4060 Laptop GPU, 566.24, 8188 MiB",
+    "isolation": "Workspace venv with system-site-packages; installs local only; retained CUDA library directories linked read-only from saturn environment",
+    "packages": {
+      "anndata": "0.11.4",
+      "flax": "0.10.7",
+      "jax": "0.6.2",
+      "jax-cuda12-pjrt": "0.6.2",
+      "jax-cuda12-plugin": "0.6.2",
+      "jaxlib": "0.6.2",
+      "nbclient": "0.10.4",
+      "nbformat": "5.10.4",
+      "numpy": "1.26.4",
+      "nvidia-cuda-nvcc-cu12": "12.6.85",
+      "optax": "0.2.8",
+      "orbax-checkpoint": "0.11.36",
+      "psutil": "7.2.2",
+      "scanpy": "1.11.5",
+      "scikit-learn": "1.3.2",
+      "scipy": "1.15.3",
+      "torch": "2.12.0+cu126",
+      "umap-learn": "0.5.12"
+    },
+    "platform": "Linux-6.6.87.2-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+    "python": "3.10.20"
+  },
+  "foundation_validation": {
+    "architecture": [
+      300,
+      384,
+      384
+    ],
+    "cells": 148727,
+    "foundation_inventory_sha256": "7706bd70c6d05f37b902f34e8c47579881debe7c8e704e8d2fe61a2848ea702d",
+    "original_foundation_hashes_unchanged": true,
+    "source_manifest_sha256": "6dc57fbcb670667f0e24ca4e0537ef5ca0f2cc9ee388e16ca2fcb4e53a49085d",
+    "species": [
+      "d_rerio",
+      "h_sapiens",
+      "m_murinus",
+      "m_musculus",
+      "x_laevis"
+    ],
+    "verified_file_count": 77
+  },
+  "limits": [
+    "A100 production run, 30-epoch scientific acceptance, remote backup and deployment not executed",
+    "Fit-time raw input hashes were not captured for the historical foundation",
+    "Two real within-species tie/roundoff ordering rows are reported separately",
+    "Full GPU test exact resume uses bounded integration fixtures; real-data neighbor accuracy uses complete reference populations"
+  ],
+  "logs": {
+    "cpu_suite.log": {
+      "passed": true,
+      "path": "out/gpu_exact_validation/cpu_suite.log",
+      "seconds": 787.669,
+      "sha256": "5de73b2c51690c4a0e12b3d0afef8ac29e94d17f080f47adc979d031ffc25e76",
+      "skipped": 9,
+      "tests": 92
+    },
+    "docs.log": {
+      "path": "out/gpu_exact_validation/docs.log",
+      "sha256": "55516c82f5761a387c41ef433cc838d86430fa1091f4101f59bcee34477eb025"
+    },
+    "gpu_final.log": {
+      "passed": true,
+      "path": "out/gpu_exact_validation/gpu_final.log",
+      "seconds": 343.778,
+      "sha256": "ee6938c20ec44ff1c659f2359dd34ca0eabb93c02013fc57db58b05948ebf8f8",
+      "skipped": 0,
+      "tests": 9
+    },
+    "notebook_runner_final.log": {
+      "passed": true,
+      "path": "out/gpu_exact_validation/notebook_runner_final.log",
+      "seconds": 30.66,
+      "sha256": "3bb8ea2daa51e95c1d8ea3b09c5d81e37bbb45922b4472cc6f8bab65ee067a31",
+      "skipped": 0,
+      "tests": 7
+    },
+    "preflight.log": {
+      "path": "out/gpu_exact_validation/preflight.log",
+      "sha256": "bfe0ed70b1b2fefd1bbac405b3ddfa89034d60d47dbdc07185af7f208b9cff79"
+    },
+    "real_data.log": {
+      "path": "out/gpu_exact_validation/real_data.log",
+      "sha256": "f0bf17e06c6cd002a985ffffdfcc33f48034ec3fd15b3d2bc8c3ccd5347c6fe4"
+    },
+    "runner_final.log": {
+      "passed": true,
+      "path": "out/gpu_exact_validation/runner_final.log",
+      "seconds": 3.804,
+      "sha256": "d7c55c6c2a25f467ff6fc4cae64daac2c932a30b3e8849693d49399f3bbaf041",
+      "skipped": 0,
+      "tests": 5
+    }
+  },
+  "packaging_correction": {
+    "cause": "Initial filter excluded jax_saturn/data along with root biological data",
+    "deployment_requirement": "Replace the earlier source archive before cloud preflight",
+    "fixed": true,
+    "regression_tests": 2,
+    "tests_passed": true,
+    "validation": "All jax_saturn Python source files included; old incomplete manifest rejected; fresh-extraction NeighborSearch/WorkCache imports pass"
+  },
+  "passed": true,
+  "raw_inputs_captured_now": {
+    "inputs": [
+      {
+        "atlas": {
+          "path": "data/cell_atlases/h_sapiens.h5ad",
+          "sha256": "e64bed077c266d35c6bafa13a30311268d74e75a00b84eff9c6ec321e69cb8b8",
+          "size": 1038366002
+        },
+        "cells": 51881,
+        "genes": 19504,
+        "ordered_gene_ids_sha256": "83ac51eb234ed2780ad4228daa0b3c2b26d25f2e9b51f740028eacc6a22717e1",
+        "ordered_observation_ids_sha256": "2cea1e8c50b464c7f7c81fcb62c6cca59644bec2af493930fb331870a2cf85d8",
+        "protein_embeddings": {
+          "path": "data/gene_embeddings/esmc600_embeddings_summaries_cpu/h_sapiens_gene_all_esmc600.pt",
+          "sha256": "26592dc5db0fb9ef32f422ea9115c1fede2643e51c032988f0596fb7eb70cfa0",
+          "size": 95752841
+        },
+        "species": "h_sapiens"
+      },
+      {
+        "atlas": {
+          "path": "data/cell_atlases/m_musculus.h5ad",
+          "sha256": "931ba4e2939ff11ff8c98aee96768e489a9e1a4ba54a2f701915d51d5200eb2a",
+          "size": 408195294
+        },
+        "cells": 26947,
+        "genes": 15437,
+        "ordered_gene_ids_sha256": "9ad8908270f6549e1612dfac09c3bff105d621ef288f6f3dfbc5da3f4f6f8433",
+        "ordered_observation_ids_sha256": "cf9e9c3c0459bba804e7c78d6b1a7981b56e40ad6cd8a7fec68de2443b519fc6",
+        "protein_embeddings": {
+          "path": "data/gene_embeddings/esmc600_embeddings_summaries_cpu/m_musculus_gene_all_esmc600.pt",
+          "sha256": "41c797263f9abf8e2cda98e68c42e297493374b7c7a692dd04efe3ff112f3ca5",
+          "size": 75795459
+        },
+        "species": "m_musculus"
+      },
+      {
+        "atlas": {
+          "path": "data/cell_atlases/m_murinus.h5ad",
+          "sha256": "88e289b53ea9cefebde6b37a932296acd7bac46b07c1aeaaa386ae2f049680d1",
+          "size": 665563920
+        },
+        "cells": 38276,
+        "genes": 13495,
+        "ordered_gene_ids_sha256": "1e566518de966d5f86ee565b5afb2b6645b17c2ec7081265f01fab227eed3c3b",
+        "ordered_observation_ids_sha256": "274ff9580d259a3640ec518b03d7cce610f99c340e1de8f46b11ad00d57fc91a",
+        "protein_embeddings": {
+          "path": "data/gene_embeddings/esmc600_embeddings_summaries_cpu/m_murinus_gene_all_esmc600.pt",
+          "sha256": "ed2f4709bc41f000e1b7dd469652c7366da4ab7dc2c448b9ae507a9c8ac9d006",
+          "size": 66242830
+        },
+        "species": "m_murinus"
+      },
+      {
+        "atlas": {
+          "path": "data/cell_atlases/x_laevis.h5ad",
+          "sha256": "ce8ee43d1faaefd8ea84f1305168dd415409426f33db13b373cc69eabe5ee9ec",
+          "size": 241516338
+        },
+        "cells": 29437,
+        "genes": 30871,
+        "ordered_gene_ids_sha256": "5876915596d8066711711f3e44e1ee6a5c45964db5bbf90a97dbf8df01ffe75d",
+        "ordered_observation_ids_sha256": "476429fb3f8bf1403a05327bc6398c3c098b061d7817c048ce86d306f0a4c4c5",
+        "protein_embeddings": {
+          "path": "data/gene_embeddings/esmc600_embeddings_summaries/x_laevis_gene_all_esmc600.pt",
+          "sha256": "0ae4229a126b0cab7c227d3ea4005d9751c4d587bed1b9fd8fe2b9ffc9e20eef",
+          "size": 152126560
+        },
+        "species": "x_laevis"
+      },
+      {
+        "atlas": {
+          "path": "data/cell_atlases/d_rerio.h5ad",
+          "sha256": "682bdcf9a7c757333a974a1011f0186f9c84b1fb7afe71e65e848a5b09cc651a",
+          "size": 29248824
+        },
+        "cells": 2186,
+        "genes": 12468,
+        "ordered_gene_ids_sha256": "6671fcf02dd14ca4b2d517e0e853f0033deb6bd61511c83f03259db6fb91ca08",
+        "ordered_observation_ids_sha256": "9346c0e30a28bfaed206146b0857b4502aeccd8e2a6228dbbb1230f9fef87dc9",
+        "protein_embeddings": {
+          "path": "data/gene_embeddings/esmc600_embeddings_summaries/d_rerio_gene_all_esmc600.pt",
+          "sha256": "20f7cfc9b429b85a081545c8ae31ff6d8dad5c2e1e3d6e6c455e1a85b9b2e50c",
+          "size": 61359346
+        },
+        "species": "d_rerio"
+      }
+    ],
+    "manifest": "data/human_monkey_mouse_frog_fish.csv",
+    "manifest_sha256": "6dc57fbcb670667f0e24ca4e0537ef5ca0f2cc9ee388e16ca2fcb4e53a49085d",
+    "schema_version": 1,
+    "scope": "Content hashes captured now; no claim about missing historical fit-time hashes",
+    "split": null
+  },
+  "schema_version": 1,
+  "validation_date": "2026-10-17"
+}

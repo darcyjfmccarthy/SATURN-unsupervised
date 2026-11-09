@@ -4,3 +4,6 @@
 *.pyc
 *.pkl
 out/**
+.venv*/
+.cache/
+dist/
