@@ -1,0 +1,730 @@
+\documentclass{article}
+\usepackage{pgfgantt}
+\usepackage{graphicx} 
+\usepackage{pdflscape} 
+\usepackage{float}
+% Language setting
+% Replace `english' with e.g. `spanish' to change the document language
+\usepackage[english]{babel}
+
+% Set page size and margins
+% Replace `letterpaper' with `a4paper' for UK/EU standard size
+\usepackage[letterpaper,top=2cm,bottom=2cm,left=3cm,right=3cm,marginparwidth=1.75cm]{geometry}
+
+% Useful packages
+\usepackage{amsmath}
+\usepackage{graphicx}
+\usepackage[colorlinks=true, allcolors=blue]{hyperref}
+
+\title{Label-Agnostic Representation Learning for Cross-Species Single-Cell Data}
+\author{Darcy McCarthy (z5567643)}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+Cross-species single-cell representation learning aims to place cells from different species into a shared embedding space in which biologically corresponding populations can be compared. Such representations can support, for example, the study of conserved cell functions and how they vary across species and evolutionary lineages. However, single-cell datasets can show inconsistencies; cell-type annotations may differ between studies and species, biological states may not form discrete categories, and observed expression profiles are affected by technical noise and batch effects. Existing cross-species models, including SATURN \cite{SATURN}, nevertheless use curated cell-type labels as supervision when constructing the embedding space. This may be counterproductive: rather than discovering biological organisation from the data, the model may reproduce the assumptions and inconsistencies of the annotation system.
+This study investigates whether biologically meaningful cross-species cell embeddings can instead be learned without using cell-type labels to define the embedding geometry. We evaluate a label-agnostic contrastive-learning objective based on InfoNCE \cite{InfoNCE}, together with distribution-matching approaches based on maximum mean discrepancy \cite{MMD-MA} and optimal transport \cite{OT}. On the mammalian datasets considered, the label-agnostic InfoNCE model produced representations comparable to the supervised baseline in terms of broad biological structure and species integration. The distribution-matching approaches were less effective, suggesting that a global distribution-level alignment signal alone may be insufficient to produce strong cross-species integration. These results indicate that cell-type supervision is not strictly necessary to obtain useful cross-species representations in this setting. However, they also expose an unresolved methodological problem: evaluating label-agnostic embeddings without ultimately relying on the same annotations that the model was designed to avoid.
+\end{abstract}
+
+\section{Introduction}
+\subsection{Background and motivation}
+
+Cells are the fundamental units of biological organisation, but their molecular properties vary substantially across tissues, organisms and evolutionary lineages. Despite this diversity, biologists routinely use shared labels such as B cells, fibroblasts and endothelial cells to describe populations across species. These labels provide a useful way to discretise complex molecular variation into interpretable categories, but they inevitably compress a continuous spectrum of cellular similarity; cells assigned the same label may still differ substantially at the molecular level, while populations given different labels may nevertheless share important functional or molecular characteristics. A central problem in comparative cell biology is therefore to determine which cellular populations across species genuinely correspond, and which apparent similarities conceal meaningful evolutionary divergence.
+
+Single-cell RNA sequencing provides a way to investigate this problem by measuring gene expression in individual cells. Rather than averaging expression across an entire tissue, scRNA-seq allows heterogeneous cellular populations to be examined separately. The growing availability of single-cell atlases across species has consequently created an opportunity for machine-learning methods to identify shared cellular structure at scale \cite{CellAtlas}.
+
+Cross-species representation learning addresses this problem by mapping cells from different organisms into a shared embedding space in which distance reflects biological similarity. Ideally, cells with related molecular functions or states should occupy nearby regions of this space even when they originate from different species or experiments. At the same time, the embedding should preserve differences that reflect genuine evolutionary divergence while reducing variation caused by technical effects. A well-structured cross-species representation can therefore provide a common coordinate system for comparing cellular populations, supporting tasks such as annotation transfer, identification of corresponding cell populations, and the study of conserved and species-specific biological programmes.
+
+However, this integration introduces additional difficulties beyond those encountered when combining datasets from a single organism. Often genes may not have simple one-to-one homologous relationships, and cells with the same function in different organisms may have diverged in expression over evolutionary time \cite{SATURN-xfer}. Some cell types may have no clear equivalent in another species, while others may correspond only at a broader functional level. A cross-species representation must therefore align comparable cells without assuming that every annotated population has a direct counterpart.
+
+These difficulties are compounded by uncertainty in the cell-type annotations themselves. In practice, annotations may differ between datasets because of experiment-specific technical biases and analytic choices \cite{MetaNeighbour}. Equivalent populations may receive different labels across studies, while a single broad label may be applied to several biologically distinct populations. These inconsistencies may become more pronounced across species, where the boundaries and definitions of cell types may not be directly transferable \cite{SAMap}.
+
+The assumption that cell types form discrete categories may also be inappropriate in some biological settings. Processes such as differentiation can produce gradual transitions in gene expression rather than sharp boundaries between populations \cite{ContinuousBiology}. Cells located close together along such a continuum may be assigned different labels, while cells sharing one annotation may represent meaningfully different states. Treating these labels as definitive may therefore impose artificial boundaries on an underlying continuous biological structure.
+
+Single-cell datasets also contain technical and sampling artifacts that complicate the learning problem. Measurements are sparse and noisy \cite{ExperimentNoise}, experimental protocols introduce batch effects, and cell populations are often represented unevenly across datasets \cite{BatchEffects}. As datasets are combined, a model may therefore be exposed to a mixture of biological structure, technical variation, and annotation choices. Increasing dataset size does not necessarily resolve these issues if the additional data also introduce new inconsistencies.
+
+Despite these limitations, existing cross-species methods often use curated biological annotations to guide alignment. SATURN \cite{SATURN}, for example, combines protein-language-model representations with single-cell expression data and uses curated cell-type labels in a metric-learning objective. Cells assigned the same type are encouraged to occupy nearby regions of the embedding space, while cells assigned different types are encouraged to remain separated. This supplies a strong cell-level learning signal and can improve the alignment of similarly annotated populations across species. However, it also means that the geometry learned by the model depends directly on the annotation system supplied during training. If those labels are inconsistent, overly coarse, or impose artificial discrete boundaries, the learned representation may inherit the same limitations.
+
+This concern is also relevant to recent findings on scaling in biological foundation models. A large-scale evaluation by Microsoft researchers found that increasing pretraining dataset size and diversity did not yield consistent, predictable improvements across downstream tasks \cite{BioScaling}. Although that study does not establish the cause of this behaviour, one possible explanation is that performance is limited by the quality and consistency of the data and supervisory signals rather than model capacity alone. Scaling a model on larger collections of inconsistently annotated data may therefore reinforce incompatible structures instead of producing a more general biological representation.
+
+Together, these issues motivate investigating whether cross-species representations can be learned without using uncertain cell-type labels to define their geometry.
+
+
+\subsection{Research rationale}
+This study is motivated by the distinction between using cell-type labels to construct an embedding and using them to interpret one. Curated annotations contain substantial biological knowledge and remain useful for evaluating whether a learned representation captures recognised cellular relationships. However, this does not necessarily mean that they should be treated as the ground truth geometry of the embedding space. As mentioned earlier, when labels are used as supervision, the model is encouraged to reproduce the annotation system supplied to it. This may be appropriate when annotations are consistent and the intended task is classification, but it is less clearly appropriate when the objective is to discover shared biological structure across datasets and species. If labels are uncertain, overly coarse, or incompatible between species, imposing them during training may prevent the model from preserving relationships that do not conform to those categories.
+
+The supervised triplet-margin objective used by SATURN \cite{SATURN} illustrates this concern. Its resulting geometry is shaped by both the supplied annotations and optimisation choices that are not directly biologically motivated. A label-agnostic objective may provide a less restrictive alternative. Rather than defining positive and negative cell relationships from curated types, the model can derive its learning signal from the structure of the data or from correspondences that do not require cell-type annotations. This may allow the embedding to preserve continuous biological variation, reduce dependence on incompatible taxonomies, and extend more naturally to species for which detailed labels are unavailable.
+
+This study investigates two broad classes of label-agnostic objectives. The first is contrastive learning based on InfoNCE \cite{InfoNCE}. It retains a cell-level learning signal but does not use cell-type labels to determine which cells should be grouped or separated. The second class consists of distribution-matching methods based on maximum mean discrepancy \cite{MMD-MA} and optimal transport \cite{OT}. These approaches attempt to align species-level distributions without specifying explicit correspondences between individual cells. This comparison tests whether label-agnostic integration requires a local cell-level signal or can succeed through global distribution alignment alone.
+
+Evaluation remains a separate difficulty. A model designed to avoid fine-grained labels during training cannot be evaluated solely by how closely it reconstructs those same labels without weakening the motivation for the approach. At the same time, fully label-free measures such as species mixing cannot determine whether biologically distinct populations have been incorrectly merged. This study therefore uses broad cell categories as a partial compromise. These categories retain interpretable biological structure while reducing reliance on fine-grained annotation boundaries, although they do not provide a complete solution to the validation problem.
+
+An additional avenue of research is ensuring such a model has real biological meaning and utility, as opposed to just making a visually appealing geometry. Additional criteria to judge a sufficiently capable model would include generalising across biological distance, performance on unseen data, and in the longer term, usefulness in medically useful applications, such as identifying which aspects of some human disease are reproduced in an animal model at a cellular level. Each of these require a representation that can align corresponding cell types across species whilst preserving what makes each cell unique along multiple dimensions. 
+
+\subsection{Research aims}
+
+This study examines whether biologically meaningful cross-species cell embeddings can be learned without using cell-type labels to define the embedding space. It has three two main aims:
+
+\begin{itemize}
+    \item
+    To determine whether a label-agnostic learning objective can produce cross-species representations comparable to SATURN’s supervised metric-learning baseline;
+    \item 
+    To determine if such a label-agnostic approach can generalise across biological diversity, model scale, and unseen data, and;
+
+    \item
+    To assess how label-agnostic embeddings can be evaluated without relying solely on the cell-type labels as a metric for correctness.
+\end{itemize}
+
+To investigate these questions, the study retains the pretrained representation and general experimental setting of SATURN while replacing its supervised metric-learning objective with label-agnostic alternatives. This design isolates the effect of the learning objective and enables direct comparison between the resulting representations and the supervised baseline. Representations are evaluated jointly for preservation of broad biological structure and cross-species integration, since species mixing alone may reflect indiscriminate biological collapse.
+
+The scope of the study is deliberately limited. It does not seek to identify a universally optimal unsupervised objective for cross-species single-cell analysis. Instead, it tests whether removing cell-type supervision is viable within a constrained setting and identifies the practical and evaluative difficulties that arise when annotations no longer determine the representation.
+
+\section{Literature review}
+\subsection{Cross-species single cell representation learning}
+Cross-species single-cell representation learning aims to place cells from different organisms into a shared embedding space in which biologically corresponding populations can be compared. Single-cell RNA sequencing measures gene expression at the level of individual cells, enabling heterogeneous tissues to be examined without averaging signals across distinct cell populations. Representation-learning methods then reduce these high-dimensional expression profiles into lower-dimensional embeddings intended to preserve biologically meaningful relationships while reducing technical variation. A useful cross-species embedding should therefore place cells with related functions or states near one another, even when they originate from different organisms or experiments, while retaining differences that reflect well-established evolutionary divergence. Such representations support tasks including annotation transfer, identification of homologous cell populations and investigation of conserved or species-specific gene-expression programmes \cite{SAMap, SATURN}.
+
+ Cross-species analysis additionally requires relationships to be established between genes that have undergone duplication, loss and functional divergence. Restricting comparisons to one-to-one orthologues provides a simple common feature space but may discard genes with more complex evolutionary histories. Moreover, the most similar gene by sequence is not necessarily the gene with the most similar functional role in a particular cell population. SAMap addresses this problem by aligning cell-state manifolds while iteratively refining mappings between homologous genes. This enables it to identify cell populations with shared expression programmes even when correspondence between individual genes is complicated by paralog substitution or evolutionary divergence \cite{SAMap}.
+
+SATURN takes a different approach by representing genes through gene expression data alongside protein-language-model embeddings. It learns a set of “macrogenes”, creating a shared feature set that allows SATURN to use functional information from genes without requiring the datasets to contain the same genes or relying exclusively on predefined one-to-one orthologues \cite{SATURN}. The resulting representation has been used for cross-species integration, annotation transfer and identification of both conserved and species-specific cell populations. SATURN-xfer subsequently extends this approach through transfer learning, allowing a representation learned from existing atlases to be adapted to cells from a new species without repeating the entire multi-species training process \cite{SATURN-xfer}. These methods make SATURN an appropriate foundation for the present study because the gene-level correspondence problem is addressed before the effect of the cell-level learning objective is examined. A diagram of this pre-training process is outlined in Figure \ref{fig:saturn}.
+
+\begin{figure*}[t]
+    \centering
+    \includegraphics[width=\textwidth]{figures/saturn_fig.png}
+    \caption{An overview of the SATURN pretraining process. Taken from the original \cite{SATURN}}
+    \label{fig:saturn}
+\end{figure*}
+
+Recent efforts to create 'biological foundation models' have been successful in showing emergent cross-species knowledge. UCE uses protein embeddings and self-supervised learning to map cells from different tissues and species into a common space without requiring cell-type annotations or dataset-specific fine-tuning \cite{UCE}. TranscriptFormer instead learns a generative model of gene identities and expression across a large collection of species, with cellular hierarchies and evolutionary relationships emerging in its representations without direct supervision for those properties \cite{TranscriptFormer}. Additionally, a recent Anthropic product announcement claimed that their own foundation models had emergent capabilities on similar tasks \cite{Mythos}, though details are yet to be shared. These models demonstrate that label-agnostic cross-species representations are possible at substantially greater scale. However, both papers acknowledge the large cost of training, as well as the actual learning mechanism being a black box. For the purpose of this paper, this makes them unsuitable as direct comparisons for isolating the effect of label supervision, as the original learning signal is not clear to begin with. The present study therefore focuses more narrowly on whether SATURN’s pretrained representation can be refined without using cell-type labels to define its geometry.
+
+\subsection{Supervised metric learning and its limitations}
+Cell-type annotations provide an intuitive source of supervision for representation learning. Cells assigned the same label can be treated as biologically related, while cells with different labels can be encouraged to separate. This can improve annotation transfer and produce embeddings whose clusters correspond to established biological categories. However, cell-type labels are not neutral observations of the underlying data. They are produced through clustering, marker-gene analysis, reference mapping and expert judgment, and their resolution depends on the dataset and research question. Different studies may divide a similar population into different numbers of subtypes, combine transitional states into a single category or use different names for closely related populations. Clustering itself also requires choices about preprocessing, distance measures and resolution, meaning that the resulting categories should not automatically be treated as a definitive biological partition \cite{ClusteringChallenges}.
+
+This limitation is particularly important in cross-species analysis. A shared label does not guarantee that two populations are biologically equivalent, while different labels do not necessarily indicate that they are unrelated. Cell populations may retain a conserved core identity while differing in particular functions, expression programmes or degrees of specialisation. Conversely, an apparently continuous developmental or activation trajectory may be divided into discrete categories at different locations by different annotators, and broad cellular classes may be conserved even where finer transcriptomic properties and marker genes have diverged. A supervised model can therefore inherit both the useful biological knowledge and the inconsistencies contained in the annotation system.
+
+SATURN’s supervised fine-tuning stage illustrates this trade-off. In its contrastive learning objective, an anchor cell and a positive cell with matching labels are encouraged to move closer together, while a negative cell carrying a different label is pushed farther away \cite{SATURN,SATURN-xfer}. This directly promotes alignment between annotated cell types, but it also assumes that the supplied labels define which relationships should be preserved. Cells sharing a label are considered to be valid positives despite possible within-type heterogeneity, while cells separated by an annotation boundary may be treated as negatives even when they occupy near-identical biological states. The geometry of the embedding is also affected by the triplet margin and the strategy used to select semi-hard examples. These may be useful optimisation choices, but they are not themselves biologically determined.
+
+Supervised metric learning may be appropriate for classification under an established taxonomy, but its suitability for exploratory cross-species integration is less clear. When the aim is exploratory integration across species, forcing the embedding to reproduce a particular annotation system may remove relationships that do not fit its categories. A label-agnostic objective provides a way to test this assumption. By holding the pretrained SATURN representation constant and replacing only the supervised fine-tuning objective, the contribution of label-aware metric learning can be examined without attributing differences to an entirely different model architecture.
+
+Similarly, using labels this way may suppress within-cell-type biological variation. As an example, a fibroblast can retain its cellular identity while changing its activity in response to disease. The annotation 'fibroblast' can therefore be accurate in both affected and control tissue even when the difference between those states may be significant to some end, perhaps unknown to the researcher. A model that brings multiple cell states closer together under the same label may make disease-associated differences harder to detect. However, if such a geometry was learnt agnostic to labels, this may not be the case, increasing the usefulness of the representation for many applications. This idea is discussed in more detail in section [SECTION].
+
+\subsection{Label-agnostic learning objectives}
+Label-agnostic contrastive learning provides one possible alternative. Rather than reconstructing the complete input, a contrastive objective learns representations by distinguishing related examples from unrelated alternatives. InfoNCE assigns high similarity to an anchor and its positive example while reducing its similarity to negatives within the comparison set \cite{InfoNCE}. Its success therefore depends on how positive relationships are constructed. In supervised metric learning, class labels supply these relationships directly. In a label-agnostic setting, they may instead be inferred from augmentations, temporal relationships or neighbourhood structure. Contrastive learning remains capable of providing a local, cell-level training signal without requiring curated cell types to determine which populations should form clusters.
+
+For cross-species single-cell data, local correspondences can be inferred from an existing representation. Cells that are reciprocal or otherwise stable nearest neighbours across species provide candidate positives because their relationship is supported by the structure learned during pretraining rather than by matching annotation names. This does not make the objective assumption-free; the inferred pairs depend on the quality and biases of the teacher representation. Nevertheless, it changes the role of the annotation. The model is encouraged to preserve and strengthen observed cross-species neighbourhood relationships rather than reproducing a predefined cell-type taxonomy. This makes InfoNCE a suitable test of whether SATURN’s pretrained biological structure contains enough information to support label-agnostic refinement.
+
+Distribution matching provides a second class of objectives. Maximum mean discrepancy measures the difference between distributions by comparing their representations in a reproducing-kernel Hilbert space. Theoretically, then, minimising MMD can therefore encourage embeddings from different species to follow similar distributions without identifying explicit pairs of corresponding cells. Originally designed to jointly visualise different measurements of a single dataset, MMD-MA applies this principle to unsupervised manifold alignment, combining a distribution-alignment term with structure-preservation and anti-collapse constraints \cite{MMD-MA}. Its attraction in the present setting is that it does not require shared features, paired cells or cell-type labels. Species can be aligned at the level of their overall embedding distributions.
+
+Optimal transport offers a related but more explicit distributional perspective. Given two distributions and a cost of moving mass between their observations, optimal transport identifies a coupling that minimises the total transport cost \cite{OT}. Entropy regularisation can make this optimisation smoother and computationally tractable, while partial transport can avoid requiring all mass in one dataset to be matched to the other. This is potentially valuable for cross-species atlases because their cell-type compositions may differ: a cell population may be absent, undersampled or only applicable to a single species. Optimal transport has consequently been used in single-cell integration where direct cell-level correspondences are unavailable (e.g. SCOT \cite{SCOT}).
+
+The central distinction is between local and global learning signals. InfoNCE acts on proposed relationships between individual cells, whereas MMD and optimal transport align species-level distributions. Global alignment may remove species separation without preserving the correct local correspondences. Two distributions can appear well mixed even when biologically unrelated populations have been merged, particularly when their cell-type proportions differ. Conversely, a local contrastive objective may preserve more detailed structure but depends on the reliability of its inferred positives. Comparing these objectives therefore tests whether label-agnostic integration requires cell-level correspondence information or can emerge from distribution alignment alone.
+\subsection{Evaluating biological embeddings} 
+[holdouts, within-cell-type biological state preservation both need to be core parts of this section, currently idt it is strong enough]
+\label{sec:evaluating}
+Evaluating an integrated single-cell embedding requires balancing two competing goals: removal of dataset or species effects and preservation of biological structure. Measuring only integration is inadequate because perfect mixing can trivially be achieved by collapsing all cells into an indistinguishable but biologically meaningless distribution. Measuring only cell-type separation is also inadequate because a representation can preserve isolated clusters while failing to align corresponding populations across datasets. Large single-cell integration benchmarks therefore assess both batch removal and biological conservation rather than treating either as a sufficient measure of quality \cite{BenchmarkingIntegration}.
+
+One way to evaluate species mixing is through neighbourhood composition. The local inverse Simpson’s index estimates the effective number of datasets represented around each cell. An integration LISI value increases when local neighbourhoods contain a more even mixture of datasets or species \cite{Harmony}. However, high species mixing does not reveal whether the cells being mixed are biologically comparable. It must be interpreted alongside measures of biological preservation. Neighbourhood recall can test whether local relationships from a reference embedding survive fine-tuning, while label-aware triplets or category-purity measures can test whether recognised cell populations remain separated. Each measure captures a different failure mode rather than providing a complete evaluation on its own.
+
+Visualisation with UMAP can complement these metrics by revealing broad separation, collapse or species-specific structure. However, a two-dimensional projection cannot be treated as direct evidence of the geometry of the full embedding. UMAP necessarily distorts some distances and can produce apparently distinct clusters even when separation is weaker in the original space. It is therefore most useful as a diagnostic tool interpreted alongside quantitative measurements, not as an independent criterion for selecting the best representation.
+
+Evaluation becomes more conceptually difficult when labels have deliberately been excluded from training. Judging the model entirely by its ability to reconstruct the same fine-grained labels would reintroduce the annotation system as the ultimate definition of biological correctness. Conversely, relying only on label-free measures such as species mixing or preservation of the pretrained neighbourhood graph cannot determine whether the resulting relationships are biologically valid. Neighbourhood preservation establishes consistency with the teacher representation, but the teacher may itself contain errors or species-specific structure.
+
+Broad cell categories provide a partial compromise. Categories such as immune, epithelial and endothelial cells rely on biological distinctions that are generally more stable than fine-grained dataset-specific subtype labels. They allow severe biological collapse to be detected without requiring the model to reproduce every annotation boundary. Nevertheless, these categories remain curated labels and may conceal meaningful differences within each group. They therefore reduce, but do not eliminate, dependence on annotation.
+
+Another measure of quality is performance in identifying cells excluded from model fitting. This both provides a proof of sufficient learning, and also replicates the real-world situations such a model might be useful in. As an ensemble, held out cell-type prediction, same-label neighbourhood agreement and species mixing may assess complementary properties of a representation, acknolwedging accurate annotation transfer can coexist with poor integration \cite{BenchmarkingIntegration}. Additionally, disease annotations supply an evaluation target highly relevant for measuring held-out performance, both due to its unique characteristics as a taxonomy of cell type, and its medical utility.
+
+Despite the above, the evaluation of label-agnostic biological representations remains an open problem requiring evidence beyond internal embedding geometry, potentially including conserved marker programmes, perturbation responses, developmental relationships and other independently established biological properties. In the present study, broad category preservation, species mixing, neighbourhood preservation, label-aware diagnostic triplets, held out performance, and visual inspection are used together to form a holistic view of the learnt representations.
+\section{Methodology}
+\subsection{Research design}
+This study follows two stages: establishing whether label-agnostic fine-tuning is feasible, then testing whether the resulting representation is useful beyond the initial benchmark. The former compares a supervised SATURN fine-tuning baseline with three label-agnostic alternatives. All methods begin from the same pretrained SATURN representation, so differences between conditions can be attributed to the fine-tuning objective rather than to differences in model initialisation.
+The supervised baseline uses SATURN’s original label-aware metric-learning objective. The label-agnostic methods instead optimise objectives based on cross-species neighbourhood structure, distribution matching, or transport-based alignment. In these label-agnostic conditions, cell-type annotations are withheld during optimisation and checkpoint selection. They are introduced only after training for post hoc evaluation, as shown in Figure \ref{fig:unsupervised-training}. 
+
+From this comparison, the most performant label-agnostic objective is selected for more detailed evaluation. The second state of this paper evaluates this model (again in comparison to the baseline SATURN model) across greater evolutionary diversity, changes in model capacity and training duration, unseen cells, and disease-associated states. All four objectives are retained in the five-species and held-out-cell comparisons as a matter of interest, while the more focused scaling and disease experiments compare the selected label-agnostic approach with the supervised baseline exclusively. Additionally, the disease experiments compare both fine-tuned representations with the pretrained embeddings on their predictive power, testing if alignment preserves (or removes) cell state information that may already be present before fine-tuning.
+
+\begin{figure*}[t]
+    \centering
+    \includegraphics[width=\textwidth]{figures/unsupervised-training.png}
+    \caption{An outline of the training process for the three label-agnostic models. A frozen artifact with no cell labels is taken from SATURN's pretrained representation, with labels joined back on via an observation ID for evaluation.}
+    \label{fig:unsupervised-training}
+\end{figure*}
+\subsection{Data and preprocessing}
+For benchmarking the candidates for label-agnostic models, we use single-cell atlases from three mammalian species: human, mouse, and mouse lemur. Futher experiments on the most performant models incorporate additional fish and frog atlases as a test of biological capability. Dataset details are shown in Table \ref{tab:benchmark-datasets}.
+\begin{table}[ht]
+\centering
+\begin{tabular}{lrrr}
+\hline
+Species & Cells & Genes & Cell-type labels \\
+\hline
+Human & 51,881 & 19,504 & 83 \\
+Mouse & 26,947 & 15,437 & 78 \\
+Lemur & 38,276 & 13,495 & 83 \\
+\hline
+Frog & 29,437 & 30,871 & 40 \\
+Zebrafish & 2,186 & 12,468 & 32 \\
+\hline
+Total & 148,727 & -- & -- \\
+\hline
+\end{tabular}
+\caption{Summary of the single-cell atlases used in the study.}
+\label{tab:benchmark-datasets}
+\end{table}
+
+Each atlas includes dataset-provided cell-type annotations. These annotations are used to describe the benchmark and to evaluate the learned embeddings, but they are excluded from label-agnostic training. SATURN preprocessing reduces the input data to 2,000 highly variable genes and represents each cell through 200 macrogenes. The pretrained SATURN model then maps cells into a 256-dimensional embedding space.
+
+\subsection{Baseline model}
+The baseline follows SATURN’s standard supervised training procedure (see \cite{SATURN}). A shared SATURN model is first pretrained for 20 epochs across all three species. This pretrained checkpoint serves as the common starting point for every experimental condition. After pretraining, the baseline is fine-tuned for 30 epochs using SATURN’s original supervised metric-learning objective. This stage uses cell-type annotations to mine cross-species semi-hard triplets, encouraging cells with matching labels across species to move closer together while separating cells with different labels. The baseline therefore represents the label-aware reference model against which the label-agnostic methods are compared.
+\subsection{Label-agnostic models} \label{sec:models}
+The label-agnostic models use the same pretrained SATURN checkpoint as the supervised baseline but do not receive cell-type labels during training. For the initial benchmarking tests, each label-agnostic model is trained for 30 epochs with a batch size of 512 and learning rate of 0.001. Checkpoint selection is also label-free: the selected checkpoint maximises cross-species mixing while maintaining at least 0.70 recall of frozen same-species teacher neighbourhoods. This constraint is intended to prevent models from improving species integration by destroying local biological structure already present in the pretrained representation.
+
+All label-agnostic objectives are augmented with two topology-preservation losses derived from the frozen pretrained embedding. First, for each species independently, a same-species teacher graph is constructed by finding each cell's 15 nearest neighbours under cosine distance in the pretrained SATURN embedding space. For each anchor cell, these neighbours are combined with up to 15 randomly sampled same-species non-neighbours, forming a fixed candidate set. The cosine similarities between the anchor and these candidates are converted into a temperature-scaled probability distribution, which acts as a teacher distribution over local topology. During fine-tuning, the student embedding is encouraged to preserve this local teacher structure using a distillation loss. For each batch anchor, the model computes its similarities to the fixed candidate set in the current embedding space and minimises the KL divergence between the student and teacher neighbourhood distributions. A smooth L1 penalty on the corresponding cosine similarities is also included, so that the model preserves both the ordering of local neighbours and the approximate pairwise geometry of the pretrained representation.
+
+Second, a within-species graph contrastive loss is applied using the top five frozen same-species teacher neighbours as positives. For each anchor, these neighbours form the positive set, while the denominator contains other cells from the same species. This term discourages collapse of within-species biological structure while the alignment objective increases cross-species mixing. The total label-agnostic training loss is therefore the sum of the objective-specific alignment loss, the weighted topology-distillation loss, and a weighted within-species graph contrastive loss.
+
+Overall, the objective is the below, where \(\mathcal{L}_{\mathrm{align}}\) is the loss from the relevant model (InfoNCE, MMD-MA, or OT):
+\[
+\mathcal{L}
+=
+\mathcal{L}_{\mathrm{align}}
++
+\lambda_{\mathrm{preserve}}\mathcal{L}_{\mathrm{preserve}}
++
+0.3\,\mathcal{L}_{\mathrm{local}} .
+\]
+
+For each label-agnostic objective, the preservation weight \(\lambda_{\mathrm{preserve}}\) was initialised by matching the preservation-loss gradient scale to 25\% of the alignment-loss gradient scale:
+\[
+\lambda_{\mathrm{preserve},0}
+=
+\mathrm{clip}\left(
+0.25\,
+\frac{\lVert \nabla \mathcal{L}_{\mathrm{align}} \rVert}
+{\lVert \nabla \mathcal{L}_{\mathrm{preserve}} \rVert},
+10^{-3}, 100
+\right).
+\]
+After each epoch, the weight was updated according to the frozen-neighbour recall \(r\):
+\[
+\lambda_{\mathrm{preserve}}
+\leftarrow
+\mathrm{clip}\left(
+\lambda_{\mathrm{preserve}}
+\exp(2(0.70-r)),
+10^{-3}, 100
+\right).
+\]
+Thus, preservation pressure increased when recall fell below the 0.70 target and decreased when recall remained above it. Adaptive weighting was used because InfoNCE, MMD-MA and OT produce losses with different scales and gradient magnitudes, making a single fixed preservation weight difficult to compare across objectives. The gradient-based initialisation therefore provided a comparable starting regularisation strength, while the epoch-wise update allowed each model to move away from the pretrained geometry when local topology remained sufficiently preserved.
+
+As losses vary in scale due to highly different model archetypes, we display losses normalised to epoch 1 on the training graphs in Figure \ref{fig:training_dynamics}. A diagram showing the different algorithms in practice is provided in Figure \ref{fig:alg-diagram}.
+
+\begin{figure*}[t]
+    \centering
+    \includegraphics[width=\textwidth]{figures/alg-descriptions.png}
+    \caption{Diagrams showing visual descriptions of the three algorithms outlined in section \ref{sec:models}. InfoNCE works by pulling a cell closer to its mutual nearest neighbours, while pushing non-neighbours away. MMD-MA operates by attempting to minimise a 'distribution gap' between species on a global level, while Optimal Transport finds soft correspondences between individual cells, leaving some cells unmatched if needed.}
+    \label{fig:alg-diagram}
+\end{figure*}
+
+\subsubsection{InfoNCE}
+The InfoNCE model uses a label-agnostic, multi-positive contrastive objective. For a given anchor cell, InfoNCE increases its similarity to a set of positive cells, and decreases its similarity to other candidate cells treated as negatives. This process is shown in Figure \ref{fig:alg-diagram}. Over sufficient iterations, the aim is to create a representation where similar cells are close together, and dissimilar cells are far apart from one another. In this respect, the objective is similar to the contrastive learning algorithm used in the original SATURN model. 
+
+One of the main design choices is how 'positives' are chosen. Because true cross-species cell correspondences are unavailable, positive pairs are inferred from reciprocal cross-species nearest neighbours in a frozen teacher representation. In our model, the positives are its reciprocal neighbours in a target species as specified by the teacher graph, and the remaining cells from that target species act as alternatives in the contrastive denominator. This teacher representation combines normalised pretrained SATURN embeddings with normalised macrogene features, so that pseudo-positive pairs reflect both learned cell-state similarity and macrogene-level structure. 
+
+This is a slight divergence from the traditional paired-data formulation of InfoNCE \cite{InfoNCE}, where positives arise from known paired observations or augmentations of the same sample. Instead, it is a pseudo-pair contrastive formulation. Reciprocity is used as a conservative filter, i.e. a cross-species neighbour is retained only when the relationship is mutual, reducing the effect of one-directional matches and hub cells. Up to three positives are retained per target species, reflecting the fact that cross-species biological correspondence is often many-to-many rather than one-to-one. The objective therefore acts on local cell-level relationships: it attempts to place particular cells near their proposed cross-species counterparts, rather than aligning the species only at the level of their overall distributions. 
+
+\subsubsection{MMD-MA}
+This objective is an adaptation of MMD-MA’s distribution-alignment principle within the SATURN fine-tuning framework. It aligns species-level embedding distributions using maximum mean discrepancy. Conceptually, MMD measures how different two sets of embeddings are as distributions and encourages them to occupy more similar regions of the shared space, without specifying which individual cells should correspond, as shown in Figure \ref{fig:alg-diagram}.
+
+In this study, MMD is computed across every pair of species present in a batch. Embeddings are normalised before comparison, and a multi-bandwidth radial basis function kernel captures distributional differences at several distance scales. The final MMD loss is the average discrepancy across species pairs. This objective tests whether global distribution matching alone is sufficient to produce useful cross-species integration while retaining biological structure. However, similar overall distributions do not guarantee that biologically corresponding cells occupy the same local neighbourhoods. Species may also differ genuinely in their cell-population composition, meaning that global distribution matching can remove meaningful differences or align the wrong regions of the embedding.
+
+\subsubsection{Optimal transport}
+The optimal transport model uses a partial transport objective to align cells across species. For each pair of species in a batch, a frozen transport cost is computed from pretrained embedding similarity and macrogene similarity. Larger weights are given to lower-cost matches, creating weighted correspondences between cells.
+
+The method uses entropy-regularised partial optimal transport, producing a soft, many-to-many coupling while allowing a fixed proportion of cells to remain effectively unmatched. This is appropriate for cross-species single-cell data because not every cell population is expected to have a direct counterpart in every species. This, in theory, provides more local correspondence information than MMD-MA, while avoiding the need to select a small set of hard pseudo-positive pairs as in InfoNCE. However, the quality of the alignment depends on whether the frozen cost reflects meaningful biological similarity. A low-cost transport plan may still couple cells that are close in the teacher representation but do not perform corresponding biological functions.
+
+\subsection{Evaluation}
+Evaluation is performed after training using a shared post hoc pipeline. At this stage, cell-type annotations are joined back to the embeddings by observation identifier. This ensures that labels are used only for evaluation and not for label-agnostic optimisation or model selection.
+
+All trials are evaluated with the same nearest-neighbour metrics, the same frozen triplet set, and the same UMAP parameters. This shared evaluation procedure allows the supervised baseline and label-agnostic models to be compared under identical conditions.
+\subsubsection{Biological structure}
+Biological structure is evaluated by measuring whether local neighbourhoods preserve cell-type identity. The main metric is the fraction of each cell’s 15 nearest neighbours that share the same harmonised cell-type label. A within-species version of this metric is also computed, restricting neighbours to cells from the same species.
+
+These metrics assess whether the learned embedding preserves biologically meaningful local organisation. This is important because a model could trivially increase species mixing by collapsing distinct cell states, which would not constitute useful biological integration.
+\subsubsection{Species integration}
+Species integration is evaluated using cross-species neighbourhood mixing. The species mixing fraction measures the proportion of each cell’s nearest neighbours that come from a different species. A macro-averaged version is also used so that larger species datasets do not dominate the evaluation.
+
+In addition, normalised species iLISI is computed from the species composition of local neighbourhoods. Together, these metrics quantify the extent to which cells from different species occupy a shared embedding space rather than remaining separated by species identity.
+\subsubsection{Model performance}
+Model performance is evaluated using a frozen set of label-aware triplets generated from the pretrained representation. These triplets are not used during label-agnostic training. They provide a common post hoc test of whether each model places annotated cross-species counterparts closer together than non-corresponding cells.
+The main triplet metric is fixed triplet-margin loss with margin 0.2. This was chosen for its comparability to the original SATURN models and is used as another mechanism for comparison, not necessarily a biologically meaningful metric. The evaluation also records the fraction of active triplets and the mean anchor-positive and anchor-negative similarities. 
+\subsubsection{Out-of-sample evaluation}
+For all experiments involving test sets, held out cells are excluded from pretraining, training-neighbour construction, fine-tuning, and checkpoint selection. At inference time, they are embedded using the frozen models. Evaluation happens across several metrics. Firstly, all cells receive a predicted cell type label through a majority (or plurality, where relevant) vote among its 15 nearest training neighbours under cosine distance. Secondly, same-lbale neighbourhood agreement measures the fraction of individual neighbours that share the same label, distinguishing a correct plurality prediction from a totally unanimous vote. Thirdly, cross-species neighbourhood mixing is a similar way to previous experiments. Across all metrics, we compare across the training set and  test set to observe how well the models generalise. We also observe these figures at a per-species level to measure generalisation across biology.
+\subsubsection{Disease-state preservation}
+Disease state prediction is evaluated by predicting condition within a fixed annotated cell population. The intention is to test whether disease-associated differences remain visible within a shared cellular identity that has been adjusted to a cross-species setting. 
+Affected and control cells receive the same cell-type annotation during supervised fine-tuning (i.e. the 'disease' and 'healthy' labels are invisible to the supervised model), and the labels are only re-introduced for evaluation. Metrics are similar to previous sections; neighbour voting and mixing metrics are retained. We also introduced a balanced accuracy score, defined as the mean recall across affected and control cells. Under this metric, a predictor that always chooses either condition would score 50\%, and as such we use this number as our benchmark.
+
+Performance is evaluated across three disease datasets. For the RDEB \cite{RDEB2023} and IPF \cite{AdamsIPF2020} data, scores pool held-out cells within each evaluated population, with donors represented across both training and test sets due to data size limitations. These comparisons measure retained condition associated information, but cannot themselves establish transfer to unseen donors or exclude donor-specific contributions to the learnt representation. The third dataset of colorectal cancer data \cite{PelkaCRC2021} reserves entire donors from fitting and training references. Balanced accuracy on this dataset is additionally calculated per patient, and averaged with equal patient weight.
+
+For all conditions, UMAPs are fit on training embeddings without disease labels, with held-out cells transformed afterwards. As with other experiments, we provide condition overlays to provide visual context on how the algorithms preserve the relevant cellular information.
+\subsection{Experiment setup}
+Across all experiments in the paper, several configurations are shared. All experiments use a random seed of 0 and run 20 epochs in the pretraining phase. Both supervised and label agnostic fine-tuning use a batch size of 512 and a learning rate of 0.001 where applicable. All methods compared within an individual experiment begin from the same pretrained checkpoint. Seperate pretrained models are constructed when the input collection or architecture changes, as is the case in several of the below experiments. The label-agnostic benchmarking phase, given smaller datasets, was all run on an NVIDIA GeForce RTX 4060 Laptop GPU. Due to higher compute requirements, all subsequent experiments were run on NVIDIA A100 hardware.
+
+\subsubsection{Label-agnostic model benchmarking}
+For the first phase of the paper, all label-agnostic model benchmarking runs use the same experimental setup, with an embedding dimension of 256, a macrogene dimension of 200, and a learning rate of 0.001. The full experiment is implemented as a single reproducible pipeline, invoked via Jupyter notebook. The pipeline performs data inspection, shared SATURN pretraining, supervised baseline training, label-free artifact construction, label-agnostic fine-tuning, and shared post hoc evaluation. The same pretrained checkpoint, evaluation labels, triplet set, and metric definitions are used across all trials.
+\subsubsection{Evolutionary diversity}
+To investigate this model capability across a wider range of taxonoimes, frog and zebrafish atlases were added to the three mammalian inputs, bringing the total to 148,727 cells across five species as shown in table \ref{tab:benchmark-datasets}. All four methods began from a shared pretrained model with a larger, 384-dimensional embedding. Pretraining ran for 20 epochs, followed by 30 epochs of supervised, InfoNCE, MMD-MA or partial optimal transport fine-tuning. Cell-type labels remained excluded from label-agnostic training and checkpoint selection.
+\subsubsection{Model scaling}
+In this experiment, the five-species population was held fixed while varying embedding dimension and training duration. All 148,727 cells were retained, with 300 macrogenes and a hidden width of 384. Embedding dimensions of 192, 384 and 768 increased the number of parameters in the cell encoder from 191,256 to 414,168. Each size received fresh pretraining for 20 epochs, followed by 50 epochs of supervised or InfoNCE fine-tuning. The two objectives shared the same pretrained model within each size.
+
+Representations were evaluated after 10, 20, 30, 40 and 50 fine-tuning epochs. Species mixing was averaged equally across the five species, while same-label neighbourhood agreement was averaged across cells. All results describe the model at the stated training epoch. The inputs, learning rates, batch size and random seed were kept the same across runs. All computational costws are measured as elapsed fine-tuning time on the aforementioned A100 hardware, including epoch evaluation and saving but excluding pretraining and initial setup (as the timer starts at epoch 0). This measures the practical time required to reach each training burdget, rather than specifically estimating FLOPs.
+
+\subsubsection{Inference on unseen cells}
+To test performance on unseen data, a separate five-species experiment reserved 10\% of each species' cells before fitting the model. This left 133,852 training cells and 14,875 held-out cells. The experiment used 200 macrogenes and a 256-dimensional embedding, with 20 pretraining epochs and 30 fine-tuning epochs per method. Held-out cells were excluded from fitted preprocessing, pretraining, neighbour construction, fine-tuning and checkpoint selection. They were then embedded using the frozen models.
+
+Evaluation compared training and held-out cells against the same training reference. Each cell received a predicted cell-type label by majority vote among its 15 nearest training neighbours, using cosine distance. Training queries excluded themselves. This supplied a simple measure of whether the representation retained its ability to organise unseen cells, alongside the existing species-mixing and same-label neighbourhood scores.
+\subsubsection{Disease state preservation}
+To investigate the performance of label-agnostic methods to model disease states, three disease datasets were added separately to the five-species atlas collection: mouse skin from a model of recessive dystrophic epidermolysis bullosa (RDEB), human lung from subjects with idiopathic pulmonary fibrosis (IPF), and human colorectal cancer. Each experiment compared a shared pretrained representation, the supervised SATURN baseline and InfoNCE. Each experiment used a fresh pretrained model incorporating the additional study cells alongside the human, mouse lemur, mouse, frog and zebrafish atlases. The models retained 200 macrogenes and a 256-dimensional cell embedding, with 20 pretraining epochs followed by 30 epochs of supervised or InfoNCE fine-tuning.  Preprocessing, pretraining and fine-tuning used training cells only. The supervised baseline received the same coarse cell-type annotation for affected and control cells within each evaluated population. InfoNCE used neither cell-type nor disease annotations, and disease outcomes were not used to select checkpoints.
+
+Disease information was evaluated after training using a fixed nearest-neighbour readout. Disease-state prediction was evaluated separately within each annotated cell population. Each held-out cell queried its 15 nearest training study cells from that population, including both affected and control cells, using cosine distance in the frozen 256-dimensional embedding. Their condition labels supplied a majority-vote prediction. Atlas cells were excluded from the disease votes because their condition was not independently verified. 
+
+The RDEB and IPF experiments used a deterministic 90/10 cell split within each species. Animals or patients could therefore contribute cells to both training and evaluation. The cancer experiment used a stronger patient-level split, with all selected cells from six patients excluded from fitting. All UMAPs were fitted on training embeddings and used to transform held-out cells, without disease labels.
+
+\section{Results}
+
+\subsection{Overview}
+\begin{figure*}[t]
+    \centering
+    \includegraphics[width=\textwidth]{figures/Pretrained representation.png}
+    \caption{UMAP plots of SATURN's pretrained representation after 20 epochs. The representation is visibly divided along species lines (left). \cite{SATURN}}
+    \label{fig:pretrained}
+\end{figure*}
+SATURN's pretrained representation contained almost no cross-species integration, as seen in figure \ref{fig:pretrained}. The UMAP plots are divided along species lines with little-to-no mixing, apart from in border regions.  This is reinforced by the fact that only 0.0004 of each cell's nearest neighbours on  average belonged to another species. Therefore, all cross-species alignment needed to be introduced during the fine-tuning process.
+
+Table~\ref{tab:main-results} summarises the relevant metrics from the selected checkpoint for each fine-tuning objective. The supervised SATURN baseline achieved a cross-species neighbour fraction of 0.1059 and a normalised species iLISI of 0.0986. InfoNCE produced almost identical integration scores of 0.1054 and 0.0973. In contrast, MMD-MA and partial optimal transport produced substantially less species mixing, with cross-species neighbour fractions of 0.0105 and 0.0317.
+
+The metrics capturing local structure displayed the opposite pattern. While the supervised baseline obtained a same-label neighbour fraction of 0.8088, InfoNCE reduced this value to 0.7487, whereas MMD-MA and partial optimal transport retained values of 0.8224 and 0.8063. Thus, the methods that achieved the strongest label-agnostic integration also produced the largest reduction in fine-grained label preservation.
+
+\begin{table*}[t]
+\centering
+\caption{Post-hoc evaluation of the supervised baseline and label-agnostic objectives. Higher values are better for mixing, iLISI, and same-label neighbourhood preservation; lower values are better for triplet loss.}
+\label{tab:main-results}
+
+\small
+\setlength{\tabcolsep}{4pt}
+
+\begin{tabular*}{\textwidth}{@{\extracolsep{\fill}}lcccccc@{}}
+\hline
+Method &
+Label-free &
+Chosen Epoch &
+Mixing &
+iLISI &
+Same-label NN &
+Triplet loss \\
+\hline
+SATURN baseline & No  & 30 & 0.1059 & 0.0986 & 0.8088 & 0.0483 \\
+\hline
+InfoNCE         & Yes & 20 & 0.1054 & 0.0973 & 0.7487 & 0.0923 \\
+MMD-MA          & Yes & 30 & 0.0105 & 0.0102 & 0.8224 & 0.1697 \\
+Partial OT      & Yes & 23 & 0.0317 & 0.0279 & 0.8063 & 0.0565 \\
+\hline
+\end{tabular*}
+\end{table*}
+\begin{figure*}[t]
+    \centering
+    \includegraphics[width=\textwidth]{figures/training_dynamics.png}
+    \caption{Training dynamics for the four models. The plot on the left shows the losses, normalised to loss at epoch one, as the different algorithms result in loss figures on slightly different scales. The right side shows neighbour recall per epoch for the label-agnostic models, compared to the cutoff of 0.7 (dotted).}
+    \label{fig:training_dynamics}
+\end{figure*}
+
+\subsection{InfoNCE}
+
+InfoNCE produced the strongest result among the label-agnostic objectives. Its UMAP representation showed extensive integration of human, mouse and lemur cells while retaining clear large-scale biological organisation. Highlighting the cells by species reveals that all three species were interleaved throughout principal regions of the plot in a similar manner to the supervised baseline model.
+
+Looking at the label-coloured projection shows that this integration was not produced through indiscriminate collapse. In many parts of the plot, fine-grained cells of the same type from different species are grouped together. Figure \ref{fig:venous2} shows one example in which the venous cells from all three species are clustered tightly together. Broadly, large-scale regions and trajectories remained apparent, and related labels occupied structured portions of the embedding rather than being dispersed uniformly throughout it. InfoNCE therefore appears to have achieved the intended combination of cross-species integration and preservation of biologically interpretable structure, despite not receiving any cell-type labels during the training process.
+
+\begin{figure*}[t]
+    \centering
+    \includegraphics[width=\textwidth]{figures/venous2.png}
+    \caption{Cells with the label 'venous' across all four fine-tuned models. The supervised baseline shows the best clustering, followed by InfoNCE. OT has most of the cells in the same area but still split along species lines, while MMD-MA shows substantially less species mixing in general.}
+    \label{fig:venous2}
+\end{figure*}
+
+This visual result was supported by the species-integration metrics. InfoNCE achieved a cross-species neighbour fraction of 0.1054, only marginally less than the supervised baseline. Its normalised species iLISI fraction and macro-averaged mixing fraction were similarly close. Therefore, not only was InfoNCE the best performing label-agnostic objective, but it appears to have produced almost exactly the same level of cross-species integration as the label-aware model.
+
+The selected InfoNCE checkpoint occurred at epoch 20, though loss appears to decrease throughout all 30 epochs, as seen in Figure \ref{fig:training_dynamics}. This implies lower losses were achieved by diverging even further from the pretrained representation, an idea examined further in section \ref{sec:future-work}. The model performed less strongly on the fine-grained, label-aware evaluation metrics; its same-label neighbour fraction was 0.7487, compared with 0.8088 for the supervised baseline, while its within-species same-label fraction similarly decreased from 0.8250 to 0.7777.
+
+These differences indicate that InfoNCE did not reconstruct the same fine-grained annotation geometry as the supervised model. However, they should not be interpreted as evidence that the resulting representation lacked meaningful biological structure. Both measures directly reward agreement with the cell-type labels used to train the supervised baseline. A label-agnostic model may preserve biologically relevant relationships while organising fine-grained populations differently from those predefined categories. Consistent with this interpretation, the broad-category neighbourhood analysis remained strong across the majority of species and cell-category combinations.
+
+Taken together, the visual and quantitative results demonstrate that InfoNCE produced a convincing cross-species representation without cell-type supervision. It matched the supervised baseline almost exactly on species integration while retaining clearly structured biological regions and broad cellular organisation, but its principal difference was reduced correspondence with the fine-grained annotation geometry imposed by supervised training.
+
+
+\subsection{Distribution-matching results}
+
+\subsubsection{Maximum mean discrepancy}
+
+MMD-MA produced the weakest cross-species integration of the three label-agnostic models. However, its training dynamics appeared the strongest; its objective loss decreased consistently and by more than that of the other models relative to epoch 1 (see Figure \ref{fig:training_dynamics}). It finished with a cross-species neighbour fraction of 0.0105, and a normalised species iLISI of 0.0102. These values were approximately 90\% below those of the supervised baseline, indicating a substantially un-mixed representation.
+
+Likely as a result of the lack of species mixing, MMD-MA retained strong local annotation structure. Its same-label neighbour fraction was slightly higher than the baseline value, and its within-species and species-macro-averaged preservation scores were similarly high. The UMAP projection retained clear species-dependent regions, with human, mouse and lemur cells occupying visibly different parts of the representation. The high label-preservation score therefore occurred alongside limited cross-species alignment, and should not be interpreted as successful multi-species integration.
+
+\subsubsection{Optimal transport}
+
+Optimal transport produced more species integration than MMD-MA but remained substantially below both InfoNCE and the supervised baseline in most metrics. Its results returned with a cross-species neighbour fraction of 0.0317 and a normalised species iLISI of 0.0279. The training trajectory appeared unstable and reached a plateau after approximately 20 epochs, while recall of pretrained neighbourhoods remained above the checkpoint-selection floor.
+
+Similarly to MMD-MA, local annotation structure was largely preserved, while species mixing remained low. The model obtained a same-label neighbour fraction of 0.8063, close to the supervised baseline. Despite these preservation results, however, species identity remained visibly structured in the UMAP projection. The representation contained more overlap than MMD-MA, but the three species continued to occupy partially distinct regions. Therefore, it appears that optimal transport retained more of the supervised geometry than InfoNCE but did not produce a comparably integrated cross-species space.
+
+\subsection{Comparison of learning objectives}
+
+These results reveal a clear difference between the cell-level and distribution-level learning objectives. InfoNCE achieved species integration comparable to the supervised model, but this was accompanied by reduced fine-label neighbourhood preservation. MMD-MA and optimal transport retained more of the original local structure, but neither produced sufficient species mixing.
+
+This presents a fairly logical tradeoff: higher mixing appears to co-occur with less neighbourhood preservation, and vice versa, as a distribution that creates no mixing will have a high neighbourhood preservation score. This is visible across all three forms of evaluation. Firstly, the species-mixing and iLISI metrics place InfoNCE close to the supervised baseline and the distribution-matching methods substantially below it. Secondly, the fine-label neighbourhood metrics favour MMD-MA and partial optimal transport over InfoNCE. Finally, the UMAP projections show broad species interleaving under InfoNCE but continued species-dependent structure under both distribution-matching objectives. The repeated appearance of this tradeoff raises questions about future limitations of this work, discussed in section \ref{sec:future-work}.
+
+The broad-category results seen in Figure \ref{fig:broad-categories} provide a more interpretable view of the geometry of InfoNCE in comparison to the baseline. Although fine-label preservation declined, broad immune, epithelial, endothelial, mesenchymal and other categories generally remained highly coherent, resembling the baseline strongly. The representation therefore did not collapse biological structure uniformly. Instead, InfoNCE appears to have preserved coarse cellular organisation in a manner comparable to the baseline model.
+
+\begin{figure*}[t]
+    \centering
+    \includegraphics[width=\textwidth]{figures/broad cells.png}
+    \caption{UMAP plots of the SATURN baseline and InfoNCE, coloured by the broad cell categories introduced in section \ref{sec:evaluating}. Both retain coherent broad cell-category structure.}
+    \label{fig:broad-categories}
+\end{figure*}
+
+Overall, the comparison indicates that global distribution matching alone was insufficient to produce strong cross-species integration in this experiment. A label-agnostic cell-level signal was required to approach the mixing achieved by supervised SATURN. However, the fact that InfoNCE matched the integration metrics without matching the fine-label and triplet metrics also demonstrates that the choice of evaluation target materially affects whether the resulting representation is judged successful.
+
+As a result of these experiments, we choose InfoNCE as our main candidate to be taken into subsequent parts of these paper. The extended experiments assess if this initial feasibility translates into practical utility across greater evolutionary diversity, model scale, unseen cells, and disease-associated cell states.
+
+\subsection{Integration across evolutionary distances}
+InfoNCE retained strong integration in the five-species collection, with a cross speecies neighbourhood fraction of 0.1276. In comparison with a score of 0.0895 for the supervised SATURN objective, the unsupervised model's strength  in species mixing appears to extend even further in a more-diverse setting. This advantage remains when mixing is averaged across species; InfoNCE achieved a score of 0.1653, compared with 0.0951 for the supervised baseline. The differences therefore appear agnostic to the imbalanced species counts. Additionally, both new species are visibly integrated into the shared representation, as shown in Figure \ref{fig:five-species-umaps}. As was the case in the mammalian experiments, SATURN's same neighbour proportion remained slightly higher than InfoNCE, at 0.8330 compared to 0.7621, continuing the pattern of stronger integration coinciding with weaker cell-label agreement.
+
+\begin{figure}[t]
+    \centering
+    \includegraphics[width=\textwidth]{figures/extensions/species_umaps.pdf}
+    \caption{Five-species UMAPs for the supervised SATURN baseline and InfoNCE, coloured by species. Both show overlap between mammalian and non-mammalian cells, alongside smaller populations that remain separated.}
+    \label{fig:five-species-umaps}
+\end{figure}
+\subsection{Model scaling and training duration}
+Longer training improved InfoNCE's species mixing at all three dimensions (Figure~\ref{fig:model-training-scaling}). For example, mixing in the 384-dimensional model increased from 12.40\% after 10 epochs to 18.26\% after 50. This was accompanied by a decrease in same-label neighbour agreement from 78.14\% to 75.71\%. The curves flattened towards the end: all three sizes gained less than 0.3 percentage points of mixing between epochs 40 and 50. Additional training therefore continued to help, but most of the improvement occurred earlier.
+
+\begin{figure}[t]
+    \centering
+    \includegraphics[width=\textwidth]{figures/scaling/training.pdf}
+    \caption{Species mixing and same-label neighbourhood agreement as fine-tuning continues. The three embedding dimensions are overlaid in each panel. Colour identifies dimension; solid lines and circles denote InfoNCE, while dashed lines and squares denote the supervised baseline. Mixing is averaged equally across species.}
+    \label{fig:model-training-scaling}
+\end{figure}
+
+Increasing embedding dimension had much less effect on InfoNCE's final integration (Figure~\ref{fig:model-scaling-comparison}). After 50 epochs, species mixing was 18.19\% at 192 dimensions and 18.37\% at 768, a difference of only 0.18 percentage points. Same-label agreement was similarly close, at 75.83\% and 75.74\%. The supervised baseline showed a different pattern: increasing dimension raised same-label agreement from 82.24\% to 85.83\%, while mixing fell from 16.58\% to 11.00\%. Greater capacity therefore changed the balance between integration and annotation agreement, rather than improving both consistently.
+
+\begin{figure}[t]
+    \centering
+    \includegraphics[width=\textwidth]{figures/scaling/capacity.pdf}
+    \caption{Embedding-dimension scaling after 50 fine-tuning epochs. Every point uses a freshly pretrained model and the same five-species population. Solid lines and circles denote InfoNCE; dashed lines and squares denote the supervised baseline. Colours match the dimensions in the training curves.}
+    \label{fig:model-scaling-comparison}
+\end{figure}
+
+The optimisation curves show falling losses across all three dimensions (Figure~\ref{fig:model-optimisation}). InfoNCE's contrastive loss reached 5.08 at 192 dimensions and 4.94 at 768 dimensions after 50 epochs. Larger embeddings therefore achieved a lower training loss, even though their final species mixing was almost unchanged. Better fit to the training objective did not produce a comparable improvement in integration.
+
+\begin{figure}[t]
+    \centering
+    \includegraphics[width=\textwidth]{figures/scaling/optimisation.pdf}
+    \caption{Optimisation over all 50 recorded fine-tuning epochs. The baseline panel shows its supervised training loss; the InfoNCE panel shows the contrastive term before adding preservation losses. The two panels use separate loss scales. Colours identify embedding dimension.}
+    \label{fig:model-optimisation}
+\end{figure}
+
+The larger embeddings also cost more to train (Figure~\ref{fig:model-compute-scaling}). InfoNCE's 50 fine-tuning epochs took 20.8 minutes at 192 dimensions and 29.8 minutes at 768 on the same A100 hardware. This additional time produced very little improvement in final mixing. Within the tested range, extending training had a clearer effect on integration than increasing embedding dimension, and the smaller model reached almost the same final result sooner. These three sizes and one random seed describe the observed scaling behaviour, but do not establish a general power law.
+
+\begin{figure}[t]
+    \centering
+    \includegraphics[width=\textwidth]{figures/scaling/compute.pdf}
+    \caption{Scaling measurements against elapsed fine-tuning time in minutes. Colour and line styles match the training curves. Time includes training, epoch evaluation and saving on the same A100 GPU, excluding pretraining and initial setup; it measures elapsed time rather than FLOPs.}
+    \label{fig:model-compute-scaling}
+\end{figure}
+\subsection{Generalisation to unseen cells}
+InfoNCE showed very little deterioration on held-out cells (Figure~\ref{fig:heldout-accuracy}). Its label-prediction accuracy changed from 81.34\% on training cells to 81.09\% on held-out cells, a decrease of 0.25 percentage points and the smallest average drop among the four methods. Same-label neighbourhood agreement was similarly stable, changing from 74.37\% to 74.13\%. The result was also consistent across species: InfoNCE's largest species-level accuracy drop was 0.44 percentage points, for frog.
+
+\begin{figure}[t]
+    \centering
+    \includegraphics[width=\textwidth]{figures/extensions/heldout_accuracy.pdf}
+    \caption{Training and held-out cell-type prediction accuracy, using a majority vote among 15 training neighbours. Training cells exclude themselves from their reference neighbours. The horizontal axis is enlarged to show the differences; labels give training and held-out percentages respectively.}
+    \label{fig:heldout-accuracy}
+\end{figure}
+
+This consistency occurred alongside retained species integration. InfoNCE's held-out cross-species neighbour fraction was 0.1145, close to the supervised baseline's 0.1196. The baseline still achieved higher absolute held-out label accuracy, at 82.82\%, although its decrease from training was larger, at 1.73 percentage points. MMD-MA and optimal transport also retained high held-out accuracy, but their cross-species neighbour fractions were only 0.0291 and 0.0274. Their label scores therefore continued to coexist with much weaker integration.
+
+The UMAP projections provide a visual comparison (Figure~\ref{fig:heldout-placement}). Held-out cells appear to generally occupied the same regions as training cells under both the baseline and InfoNCE. Each UMAP was fitted on training cells only, with held-out cells projected afterwards. Their placement therefore reflects application of the learned representation to new cells.
+
+\begin{figure}[t]
+    \centering
+    \includegraphics[width=\textwidth]{figures/extensions/heldout_umaps.pdf}
+    \caption{Held-out cells (orange) projected alongside training cells (grey) for the supervised baseline and InfoNCE. Each UMAP was fitted on the 133,852 training cells and then used to transform the 14,875 held-out cells. The methods have separate coordinate systems.}
+    \label{fig:heldout-placement}
+\end{figure}
+
+\subsection{Preservation of disease-associated cell states}
+The following disease experiments tested whether cross-species alignment preserves condition-associated variation within populations sharing the same cell-type annotation. It is of note that retaining recognisable cell identities alone does not necessarily indicate that meaningful differences within those identities survive
+integration.
+\subsubsection{RDEB and IPF}
+The RDEB dataset contained 9,816 skin cells from two wild-type and two \textit{Col7a1}-knockout mice \cite{RDEB2023}. Keratinocytes provided a comparison with an existing mouse skin atlas population, while fibroblasts provided a second, within-study comparison. The IPF experiment used the Adams et al. lung dataset, selecting fibroblasts and alveolar macrophages from 32 IPF subjects and 28 same-study controls, excluding COPD samples \cite{AdamsIPF2020}. All 2,290 selected fibroblasts were retained, and macrophages were capped at 200 cells per subject, leaving 10,421 macrophages. These sampled counts describe the model inputs rather than disease-associated changes in cellular abundance.
+
+Table~\ref{tab:disease-cell-holdout} shows that condition-associated information remained in all four InfoNCE populations. Balanced accuracy was 80.2\% for RDEB fibroblasts and 66.5\% for keratinocytes, compared with 74.9\% and 58.5\% for the supervised baseline. In IPF, InfoNCE reached 69.2\% for fibroblasts and 78.0\% for macrophages, compared with 60.1\% and 72.5\%. InfoNCE therefore retained more accessible disease information than the supervised baseline in each comparison. However, pretraining scored above both fine-tuned representations in all four populations. The result supports partial preservation through alignment, rather than an improvement in disease separation over the initial representation.
+
+\begin{table}[t]
+    \centering
+    \caption{Condition prediction within shared cell types for held-out RDEB and IPF cells. Values are cell-weighted balanced accuracies (\%). Each query uses 15 training study neighbours of the same cell type. Donors occur in both splits, so these scores do not measure unseen-donor transfer.}
+    \label{tab:disease-cell-holdout}
+    \small
+    \setlength{\tabcolsep}{5pt}
+    \begin{tabular*}{\textwidth}{@{\extracolsep{\fill}}llrrrr@{}}
+        \hline
+        Dataset & Cell population & Test cells & Pretraining & Baseline & InfoNCE \\
+        \hline
+        RDEB & Fibroblast    & 356   & 82.3 & 74.9 & 80.2 \\
+             & Keratinocyte & 267   & 74.6 & 58.5 & 66.5 \\
+        IPF  & Fibroblast   & 245   & 70.4 & 60.1 & 69.2 \\
+             & Macrophage   & 1,023 & 81.6 & 72.5 & 78.0 \\
+        \hline
+    \end{tabular*}
+\end{table}
+
+The UMAPs did not show equally clear disease-specific populations. RDEB keratinocytes overlapped substantially across conditions, without a separate knockout cluster shared by both affected animals. IPF fibroblasts also overlapped, even as fine-tuning reduced the initial offset between study and atlas cells (Figure~\ref{fig:disease-noncancer-umaps}). Thus, the absence of a distinct disease island in two dimensions did not imply the absence of condition information in the full embedding. Conversely, the neighbour scores do not establish that disease biology alone explains the retained signal. Donor-specific expression and processing differences can contribute when donors occur in both splits.
+
+\begin{figure}[t]
+    \centering
+    \includegraphics[width=\textwidth]{figures/disease/noncancer_umaps.pdf}
+    \caption{Condition overlays for mouse skin keratinocytes in RDEB (top) and human lung fibroblasts in IPF (bottom). Columns show pretraining, the supervised SATURN baseline and InfoNCE. Blue denotes same-study controls, orange denotes affected cells, and grey denotes atlas references; the IPF reference includes fibroblasts and alveolar fibroblasts. Training and held-out cells are shown together. These views retain the original full-training-cohort UMAP coordinates, filtered to the indicated populations; each method has its own coordinate system.}
+    \label{fig:disease-noncancer-umaps}
+\end{figure}
+\subsubsection{Colorectal cancer}
+
+The colorectal cancer experiment provided a clearer test of disease-state preservation. It used malignant and adjacent-normal epithelial cells from the Pelka et al. cohort \cite{PelkaCRC2021}, restricted to unsorted cells measured with the same 10x 3\(^{\prime}\) v2 assay and annotated as stem- or transit-amplifying-like. Equal numbers of malignant and nonmalignant cells were sampled within each patient, capped at 200 per class, producing 8,626 cells from 27 paired patients. A patient split stratified by mismatch-repair status and collection centre reserved six patients, comprising 2,124 cells, for evaluation, and the remaining 21 patients supplied 6,502 training cells.
+
+InfoNCE preserved a strong malignant-versus-nonmalignant distinction in these unseen patients (Table~\ref{tab:disease-cancer-holdout}). Its mean per-patient balanced accuracy was 94.96\%, compared with 83.75\% for the supervised baseline and 94.88\% for pretraining. The paired difference between InfoNCE and the baseline was 11.21 percentage points and 0.08 points from pretraining. This provides stronger evidence that InfoNCE retained an existing disease-associated distinction through fine-tuning, while the supervised baseline retained less of it. 
+
+\begin{table}[t]
+    \centering
+    \caption{Malignant-versus-adjacent-normal prediction in six unseen colorectal cancer patients. Balanced accuracy is calculated separately within each patient and then averaged with equal patient weight. Intervals are percentile 95\% intervals from 10,000 patient-bootstrap resamples. No test patient contributes training references.}
+    \label{tab:disease-cancer-holdout}
+    \begin{tabular*}{\textwidth}{@{\extracolsep{\fill}}lcc@{}}
+        \hline
+        Representation & Balanced accuracy (\%) & 95\% interval (\%) \\
+        \hline
+        Pretraining & 94.88 & 91.79--97.21 \\
+        SATURN baseline & 83.75 & 74.08--91.50 \\
+        InfoNCE & 94.96 & 93.08--96.75 \\
+        \hline
+    \end{tabular*}
+\end{table}
+
+The same distinction was visible in the cancer-focused UMAPs (Figure~\ref{fig:disease-cancer-umaps}). Malignant and nonmalignant cells occupied largely different regions after pretraining and InfoNCE, while the supervised baseline showed substantially more overlap. Cells from unseen patients generally projected into the corresponding regions. These plots were fitted only on training study cells, making the within-population structure easier to inspect.
+
+\begin{figure}[t]
+    \centering
+    \includegraphics[width=\textwidth]{figures/disease/cancer_umaps.pdf}
+    \caption{Cancer-focused UMAPs of the selected stem- and transit-amplifying-like epithelial cells. Nonmalignant cells are highlighted in blue (top), and malignant cells in orange (bottom), against the same study population in grey. Dots denote training cells and crosses denote cells from unseen patients. Each representation has a separate UMAP fitted on the 6,502 training study cells, with the 2,124 test cells transformed afterwards. Pretraining and InfoNCE show clearer separation of the two states than the supervised baseline, although both classes share the intestinal-progenitor training annotation.}
+    \label{fig:disease-cancer-umaps}
+\end{figure}
+
+\begin{figure}[t]
+    \centering
+    \includegraphics[width=\textwidth]{figures/disease/cancer_atlas_comparison.pdf}
+    \caption{Colorectal study cells in the five-species representation. The top row shows all cells coloured by species; the bottom row enlarges the indicated regions and highlights adjacent-normal and malignant study cells alongside matching atlas populations. References comprise 373 human crypt cells, 400 human transit-amplifying cells and 200 mouse crypt cells. Each column uses its own UMAP, with the enlarged view retaining the same coordinates.}
+    \label{fig:disease-cancer-context}
+\end{figure}
+
+The full five-species view shows that this disease separation remained visible alongside cross-species mixing (Figure~\ref{fig:disease-cancer-context}). In the InfoNCE UMAP, the human and mouse atlas progenitor populations lie alongside and partly overlap the adjacent-normal study population, while the main malignant population remains distinct. The supervised baseline shows more overlap between the two study states. Qualitatively, InfoNCE therefore gives the desired pattern: related cellular identities can align without erasing the disease-associated distinction. Complete overlap between study and atlas cells is not necessary; batch effects and differences in the precise populations sampled can leave residual offsets between independently collected datasets \cite{BatchEffects,BenchmarkingIntegration}.
+
+The malignant and adjacent-normal populations therefore remain visually distinct despite sharing the same broad cell-type annotation during training.
+
+
+
+\section{Discussion} 
+\subsection{Summary of findings}
+
+
+This first part of this study investigated whether cross-species single-cell representations could be learned without using cell-type annotations to define the geometry of the embedding space. The strongest result was produced by the label-agnostic InfoNCE objective. Its representation showed extensive integration of human, lemur and mouse cells while retaining clear large-scale biological organisation. Both visually and quantitatively, its degree of species integration was comparable to that of the supervised SATURN baseline. This indicates that, within the experimental setting considered, cell-type supervision was not strictly necessary to construct a useful shared cross-species representation.
+
+Despite these successes, InfoNCE did not reproduce the supervised baseline in every respect. Its fine-grained same-label neighbourhood preservation was weaker, indicating that its local geometry differed from the geometry imposed by supervised metric learning. However, the UMAP projections and broad-category analyses suggest that this difference did not amount to indiscriminate biological collapse; the representation remained visibly structured, with corresponding broad cellular populations occupying coherent regions despite strong mixing across species. The central finding is therefore that InfoNCE produced a convincing alternative organisation without receiving cell-type labels during training.
+
+The distribution-matching objectives were less successful. MMD-MA and optimal transport retained relatively strong local neighbourhood preservation, but neither achieved species integration comparable to InfoNCE or the supervised baseline. Their high preservation scores should consequently be interpreted cautiously: they partly reflect the fact that the models remained closer to the initially species-separated pretrained representation, and that they may not have learned much during the training process. Optimal transport produced more integration than MMD-MA, suggesting that allowing only part of each distribution to be matched was beneficial, but its final representation still contained substantial species-dependent separation.
+
+The five species experiment extended the evidence for label-agnostic integration beyond just mammals. InfoNCE retained best-in-class species mixing after the two news species were added. The scaling experiments distribguised benefits from longer training from those of larger embeddings. Longer training times improved InfoNCE's integration, indicating this algorithm may scale well with more compute. The model also supported frozen model inference on unseen cells, with lower loss between training and test than its supervised counterpart. The supervised baseline also showed greater species-dependent deterioration, hinting at a difficulty in generalising across disparate species. Finally, across the disease experiments, InfoNCE preserved more accessible condition-associated information from pretraining than supervised SATURN. In unseen cancer patients, its balanced accuracy was substantially higher than that of SATURN, whose accuracy degraded significantly after cross-species fine-tuning was introduced.
+
+These experiments support practical  utility beyond the initial feasibility comparison. Cross-species alignment, it seems, can coexist with placement of unseen cells and preservation of meaningful variation within shared identities. The disease results additionally suggest that stronger agreement with a trainin taxonomy does not neccessarily imply better preservation of the biological states contained within it. Overall, this set of experiments seems to indicate that the label-agnostic model retained useful biological structure to a greater degree than SATURN. 
+
+\subsection{Interpretation and evaluation challenges}
+A likely explanation for the relative success of InfoNCE is that it retained a local, cell-level learning signal. Reciprocal cross-species neighbours inferred from the pretrained embedding and macrogene representations were treated as positive pairs. The model was therefore given candidate relationships between particular cells, rather than being asked only to make the aggregate distributions of different species more similar. The contrastive denominator additionally required each positive relationship to be distinguished from other cells in the target species. This supplied a more specific geometric signal than simply reducing a distance between species-level distributions.
+
+The result suggests that the pretrained SATURN representation contained useful cross-species relational information even though species were initially almost completely separated in the cell embedding. scRNA-seq-derived macrogenes and the pretrained cellular representation appear to have provided enough information to propose informative cross-species neighbours. InfoNCE could then amplify these local correspondences and use them to reorganise the embedding. The topology-preservation losses and label-free checkpoint constraint also limited how far the representation could move from its pretrained within-species structure, reducing the risk that stronger mixing would be achieved through complete collapse. However, the experiment does not actually establish which component was primarily responsible for InfoNCE's performance.
+
+The distribution-matching results support the distinction between local and global alignment signals. MMD-MA attempts to reduce differences between species-level embedding distributions without identifying which individual cells should correspond. However, the three species do not necessarily contain equivalent cell populations in equivalent proportions. A global objective may therefore lack a biologically valid target: two species can differ because of sampling, tissue composition or genuine evolutionary divergence, rather than because of a removable species effect. Aligning their complete distributions does not specify which differences should be removed and which should be retained.
+
+Optimal transport addresses this problem to some extent by allowing unmatched mass. This makes it more appropriate when populations are absent, undersampled or species-specific. Its stronger integration relative to MMD-MA is consistent with that motivation. Nevertheless, the transport objective still operates primarily at the distributional level. Without reliable cell-level anchors, it can identify a low-cost coupling without guaranteeing that the coupled cells perform corresponding biological functions. The results suggest that relaxing the requirement for full distributional alignment was helpful but did not replace the need for a more explicit local correspondence signal.
+
+The apparent preservation achieved by MMD-MA and partial optimal transport also illustrates why integration and preservation metrics must be interpreted jointly. A model can preserve same-label neighbourhoods simply by leaving the initially separated species manifolds largely unchanged. Conversely, a model that successfully integrates species must alter at least some local neighbourhoods and may consequently score worse against the original labels or teacher representation. Preservation alone is therefore not evidence of successful cross-species learning, just as mixing alone is not evidence of biological correctness.
+
+This tension is especially important when evaluating a label-agnostic model. The same-label-neighbour and fixed-triplet metrics provide interpretable comparisons with the supervised baseline, but both define success through curated annotations. The supervised baseline was explicitly trained to reproduce these relationships, giving it an inherent advantage on label-aware evaluation. A label-agnostic model may organise related populations differently without necessarily producing a less biologically meaningful representation.
+
+At the other extreme, fully label-free measures are insufficient. Species mixing can be trivially increased by merging biologically unrelated cells, while recall of frozen teacher neighbourhoods establishes only that the model remains consistent with its initial representation. It does not establish that the teacher representation itself is biologically correct. UMAP visualisation can reveal obvious separation or collapse, but its two-dimensional geometry is also an imperfect proxy for the full embedding.
+
+Broad cell categories provide a useful partial compromise. Categories such as immune, epithelial and endothelial cells represent distinctions that are generally more stable and interpretable, particularly on a dataset of mammals, than fine-grained dataset-specific subtype labels. They can detect severe biological collapse without requiring the model to reproduce every annotation boundary. In this study, the preservation of broad category structure supported the interpretation that InfoNCE's strong species mixing remained biologically organised.
+
+However, broad categories do not fully resolve the evaluation problem. They remain curated labels, may conceal important variation within each category, and require categories to be defined consistently across species. This becomes increasingly difficult as the number and evolutionary diversity of species increase. A stronger validation framework would need evidence external to the training geometry, potentially including reproducibility across independent datasets, conserved marker programmes, held-out biological relationships, perturbation responses or methods such as MetaNeighbor for testing the replicability of annotated populations \cite{MetaNeighbour}. Such evidence would not make evaluation entirely label-free, but it could reduce dependence on a single annotation system.
+
+As an attempt to mitigate this dependence, held-out evaluation tests whether the learned mapping remains useful beyond the cells used to fit it. InfoNCE's small training-to-test differences support reuse of the representation for additional observations from the input atlases. Additionally, species-level evaluation also reveals differences concealed by aggregate scores: InfoNCE's consistently small declines contrast with the baseline's larger deterioration in frog cells, showing that the models differ in their ability to generalise across biological diversity.
+
+The results of the disease-state evaluation were particularly relevant to the issue of evaluation. The study explicitly asks whether the embedding retains meaningful differences within a shared cellular identity via supplying an additional biological target that broad cell-type preservation and species mixing cannot adequately assess. Patient-level evaluation strengthens this evidence by testing whether the retained distinction transfers beyond the individuals used during fitting. Together, these evaluations provide more direct evidence of usefulness than species mixing or annotation agreement alone. 
+
+\subsection{Implications for model scaling in biology}
+The scaling experiment in this paper shows that additional training and additional capacity have different effects in this setting. Longer fine-tuning improved InfoNCE's integration, while larger embeddings achieved lower contrastive loss without comparable improvements in integration. This suggests that embedding capacity was not the principal constraint within the tested range. For the supervised baseline model, increased capacity strengthened annotation agreement while reducing species mixing. A larger model therefore became more effective at satisfying one evaluation target without improving the broader integration objective. This pattern is consistent with the concern that additional capacity can reinforce the geometry encouraged by supervision, a potential confounder to previously identified scaling issues for similar models (e.g. \cite{BioScaling}).
+
+\subsection{Impacts of supervision detailed on biological representations}
+Struggling to make this section tight whatsoever. This should basically be the peak of the paper now, the payoff to the motivations in section 1; we can show not just that we can avoid annotations, but that using them as supervision seems to prevent us from learning or retaining some pretty important stuff. (Sub?)set of relevant facts:
+\begin{itemize}
+    \item A representation can recover recognised cell identities while making important differences within those identities less accessible.
+    \item The cancer comparison provides the clearest example: pretraining achieved 94.88\% balanced accuracy, InfoNCE retained 94.96\%, and supervised SATURN fell to 83.75\%. The distinction was already present before fine-tuning; the principal advantage of InfoNCE was preserving it through alignment.
+    \item The skin and lung experiments showed the same direction of effect, with InfoNCE remaining closer to pretraining in every population. Preservation was incomplete, particularly in RDEB keratinocytes, but its 8.1-point decline was smaller than the supervised baseline's 16.1-point decline.
+    \item This pattern is consistent with the supervised objective treating cells sharing an annotation as positive examples despite differences in disease state \cite{SATURN}. Encouraging their similarity supplies no explicit requirement to preserve those state differences, although it does not require them to disappear.
+    \item This limitation does not require the cell-type annotations to be incorrect. Healthy and diseased cells may correctly share a cellular identity while differing in biologically important ways that the training taxonomy does not describe.
+    \item Transfer to unseen cancer patients, with both states represented within each patient and a common assay selected, strengthens the evidence beyond the donor-overlapping skin and lung comparisons. Residual technical and population differences nevertheless remain possible contributors to condition prediction.
+    \item The comparison does not isolate labels as the sole cause, because the objectives also differ in positive-pair construction and topology-preservation losses. Lower nearest-neighbour prediction scores establish reduced accessibility under this readout, rather than proving that all disease information has disappeared.
+    \item The central implication is therefore that removing cell-type supervision can preserve useful biological variation that supervised refinement weakens. In these experiments, label-agnostic alignment offered a benefit beyond matching supervised integration: it retained distinctions that the supplied cell-type labels did not require the model to preserve.
+    \item InfoNCE retained much of the disease-associated variation present before alignment, including the distinction between malignant and adjacent-normal progenitors in held-out patients. Each disease comparison was made within one species, leaving open whether a change identified in one species is recognisable in another.
+\end{itemize}
+
+\subsection{Limitations}
+The primarily limitation of this study is the fact it has only learnt a small slice of possible biology. The study only evaluated learning across five vertebrate species, and the findings therefore do not establish performance on more evolutionary distant organisms, larger species collections, unseen organisms, or datasets with substantially different compositions. In addition, broad-category evaluation does not cover frog or zebrafish, limiting biological validation of their correspondences.
+
+Replication was largely unexplored in this study. All experiments only used one random seed, and tuning beyond the tested dimensions and durations remains limited. This is particularly relevant for the distribution matching objectives, which were only truly tested under one configuration.
+
+The atlas, RDEB, and IPF cell-level holdouts do not establish unseen-donor transfer. In particulor, the RDEB dataset only included two animals per condition, and as such it is likelhy donor-associated biology or experimental effects may have contributed to the successful inference run on that dataset. The cancer experiment, on the other hand, does provide unseen patient evaluation, but only across six held-out patients from one cohort, and a restricted epithelial population. 
+
+All models also depended on the same pretrained SATURN encoder and its ESM-derived macrogene representations. This controlled model initialisation and allowed the learning objectives to be compared directly, but it limits the generality of the conclusions. The initial cellular representation produced almost no species mixing by itself, meaning that cross-species integration was introduced primarily during fine-tuning. At the same time, the label-agnostic objectives relied on information extracted from that pretrained representation to preserve topology or infer correspondences. The success of InfoNCE is therefore conditional on the encoder containing useful cross-species information that is not already expressed as direct mixing in the cell embedding. This dependence creates a potential failure mode: if the pretrained embedding or macrogene representation proposes incorrect reciprocal neighbours, contrastive learning may strengthen those errors and produce a confidently organised but biologically incorrect geometry. The evaluation in this paper cannot completely exclude this possibility. A representation could satisfy the available mixing, preservation and category-based diagnostics while encoding incorrect cross-species correspondences in ways that those diagnostics do not measure. Held-out inference and disease-state preservation strengthen evidence for usefulness beyond reconstructing cell-type annotations, but direct validation of individual cross-species functional correspondences remains outside the present experiments.
+
+This lack of rigorous external biological validation means that both InfoNCE and the supervised baseline could be 'wrong', potentially in different ways. InfoNCE may produce a highly convincing, well-integrated representation while aligning populations that are not biologically equivalent. Conversely, the supervised baseline may perform strongly on label-based metrics simply because it was trained to reproduce the same annotation system used during evaluation. If those annotations are incomplete, inconsistent or biologically misleading, the baseline may reproduce those problems rather than recover the correct biological geometry. Agreement with the baseline therefore does not establish that InfoNCE is correct, while disagreement with it does not necessarily establish that InfoNCE has failed. It is also possible that both representations are biologically plausible in some respects while encoding distinct errors that the present evaluation cannot detect.
+
+An established cross-dataset validation approach was not included in this study. A framework such as MetaNeighbor, which evaluates whether annotated cell populations are reproducible across independent single-cell datasets, provides one example of what a stronger validation approach might look like \cite{MetaNeighbour}. It would not fully solve the problem, particularly for continuous cell states, novel populations or cross-species relationships that do not correspond neatly to existing labels. However, it could provide evidence that the populations being aligned represent reproducible biological structure rather than dataset-specific annotation choices. Other external evidence could include held-out datasets, perturbation responses or experimentally established biological relationships. Without such validation, the results support the conclusion that InfoNCE produced a strongly integrated and biologically plausible representation, but not that either InfoNCE or the supervised baseline recovered the uniquely correct biological structure.
+
+\section{Conclusions and Future Work}
+\subsection{Conclusions}
+This study investigated whether cross-species cell representations could be learned without using cell-type labels to define the geometry of the embedding space. Of the three label-agnostic approaches tested, InfoNCE produced by far the strongest result. It achieved almost the same level of species mixing as the supervised SATURN baseline, while the UMAP plots and broad cell-category analysis suggested that large-scale biological structure was still preserved.
+
+InfoNCE did not perform as strongly on the fine-grained label-aware metrics. Its same-label neighbourhood fraction and triplet loss were both worse than the supervised baseline. However, this is not necessarily surprising, as the baseline was directly trained using those labels. The InfoNCE representation appears to organise some fine-grained populations differently, rather than simply failing to retain biological structure. Broad cell categories remained clearly separated, and cells from the three species were mixed throughout the representation.
+
+The distribution-matching approaches were less successful. MMD-MA produced very little cross-species mixing, while partial optimal transport performed somewhat better but remained well below InfoNCE and the supervised baseline. Both methods retained relatively strong same-label neighbourhood scores, though this was partly because they remained closer to the initially species-separated pretrained representation. In this experiment, aligning the overall species distributions was not enough. The stronger performance of InfoNCE suggests that some form of local cell-level correspondence was needed.
+
+In the five-species experiment, strong label-agnostic integration was again visible in a more biologically diverse setting. InfoNCE continued do exceed the supervised baseline on species-mixing measures. The same pattern was observed in disease-state evaluation, where InfoNCE preserved more information accessible after pretraining than supervised fine-tuning.
+
+The results therefore show that cell-type supervision was not strictly necessary in this setting, and removing it offered a potential benefit for preserving variation within shared cell identities. A label-agnostic contrastive objective was able to produce a strongly integrated and broadly structured representation across various settings. Overall, the results support InfoNCE as a promising alternative to comparable supervised models, but stronger external biological validation would be required before making broader claims.
+
+\subsection{Future work} \label{sec:future-work}
+\subsubsection{Model development}
+The current InfoNCE result leaves several questions open. Firstly, it is not immediately clear why exactly InfoNCE appears to preserve disease-state information more effectively. Outside of the broader logic supporting a label-agnostic model in general, it is possible that InfoNCE's MI-maximising objective a more suitable objective for this type of problem, but this remains unclear. With this in mind, there is also the question of whether pseudo-pair InfoNCE is the most appropriate model for this problem. Its performance suggests that a local cell-level signal was more effective than global distribution matching in the present experiment, but this does not establish that contrastive learning is the best way to provide that signal. Other approaches based on graph alignment, self-distillation, local manifold matching or iteratively updated cross-species correspondences may produce stronger representations. Hybrid models could also combine local correspondence information with a weaker distribution-level objective.
+
+The construction of the positive pairs is another area for investigation. The current model uses reciprocal neighbours inferred from a fixed combination of pretrained SATURN embeddings and macrogene features. This provides a relatively conservative set of positives, but it limits the model to relationships already visible in the teacher representation. Incorrect initial neighbours may be reinforced during training, while valid correspondences missed by the teacher cannot be discovered. Possible alternatives include confidence-weighted positives, agreement across multiple representations, or periodically updating the cross-species neighbour graph during training. A similar avenue of work could be to use a similar loss but across neighbours-of-neighbours, like a technique used to train SAMAP \cite{SAMap}.
+
+\subsubsection{Scaling to broader biological settings}
+The five-vertebrate benchmark leaves generalisation across deeper evolutionary divisions unresolved. Comparisons including invertebrates should test whether inferred neighbours remain reliable when gene relationships and cellular organisation differ more substantially \cite{SAMap,SATURN-xfer}. A sensible next step may be to evaluate the model across a larger and more evolutionarily diverse collection of species. Vertebrates, despite some diversity, retain many broadly comparable cellular programmes, making reciprocal cross-species neighbours relatively plausible. This assumption may become less reliable when comparing more distant organisms, where gene functions, tissue organisation and cellular populations have diverged more substantially. Additional experiments should therefore include non-mammalian vertebrates and, eventually, more distant metazoan species. There is precedent for this; both SATURN \cite{SATURN} and SATURN-xfer \cite{SATURN-xfer} apply the same model class to a more diverse collection of data.
+
+Improved pretraining may be important at this scale. The present InfoNCE objective depends on the pretrained SATURN embedding and macrogene representation containing useful cross-species information, even though that information is not initially expressed as direct species mixing. A stronger or more diverse pretrained representation may produce more reliable pseudo-positive pairs. Conversely, poor pretraining could result in incorrect reciprocal neighbours being amplified during contrastive fine-tuning. Future work should therefore examine how the quality of the initial representation affects downstream label-agnostic alignment, rather than treating pretraining as a fixed input. A relatively straightforward change would be to replace the ESM1b embeddings with the more recently released ESM3 \cite{ESM3}.
+
+\subsubsection{Evaluation}
+Another important direction for future work is the development of better label-agnostic evaluation schemes. Ideally, evaluation should test whether learned correspondences reproduce biological relationships that were not used during training, checkpoint selection or construction of the teacher representation. The experiments performed on held-out cells could be further extended to strengthen the results. Held-out datasets provide one possible approach; for example, a model could be trained on one collection of species or tissues and then evaluated on whether the same cellular relationships are recovered in independently produced atlases.
+
+Additionally, methods such as MetaNeighbor \cite{MetaNeighbour} could also be used to test whether aligned populations represent reproducible cell identities across datasets rather than dataset-specific choices or effects. Other evidence may include conserved marker-gene programmes, known developmental relationships, perturbation responses and experimentally established functional similarities. No single source of evidence is likely to provide a complete biological ground truth. However, agreement across several independent forms of validation would provide stronger support than agreement with a single annotation taxonomy.
+
+A robust evaluation should also distinguish between errors at different levels of biological resolution. For example, a representation may correctly align broad immune or endothelial populations while incorrectly merging specialised subtypes; this failure mode was not addressed in this paper, and would not have been caught by any of the evaluation metrics used thus far. Reporting results across broad categories, disease states, fine-grained labels, continuous trajectories and known species-specific populations would also reduce the pressure to judge the representation as simply correct or incorrect according to one annotation level.
+
+Finally, as is a limitation noted of the above experiments, repeated training seeds and donor splits should establish whether the findings are reproducible, with uncertainty estimated at the biological-replicate level. Model development and validation should remain separate from final test cohorts so that evaluation continues to measure generalisation.
+
+\subsubsection{Applications}
+If the learned correspondences can be externally validated, label-agnostic representations may be useful in settings where detailed cell-type annotations are incomplete, inconsistent or unavailable. A model trained across well-studied species could provide candidate relationships for cells from a newly sequenced organism without requiring its annotations to be harmonised with an existing taxonomy. These relationships could support annotation transfer, although transferred labels should be treated as hypotheses rather than definitive classifications.
+
+The representation may also support the identification of conserved and divergent cellular programmes. Regions that align strongly across species may indicate broadly conserved functions, while populations that remain separated despite effective integration elsewhere may represent species-specific specialisation or genuinely unmatched cell states. Importantly, this use would require methods capable of distinguishing meaningful biological divergence from failures of the alignment model.
+
+More broadly, label-agnostic representation learning may allow cross-species analysis to move away from requiring every dataset to conform to a single fixed cell-type vocabulary. The present study provides evidence that this direction is feasible, but its practical value will depend on whether reliable pseudo-correspondences can be extended beyond closely related species and validated using independent biological evidence.
+
+\begin{itemize}
+    \item Frozen-model inference could support adding cells to an existing reference without repeating the full training process. The held-out results establish this capability within the input atlases, providing a basis for testing reference mapping across independently collected studies.
+    \item Models incorporating poorly annotated datasets or additional species could provide candidate cellular correspondences without requiring every population to share a harmonised annotation vocabulary. These relationships could guide annotation transfer and biological investigation, with transferred labels treated as hypotheses requiring validation.
+    \item Pulmonary fibrosis offers a starting point for cross-species disease comparison. CTHRC1-expressing fibroblasts have been identified in both human fibrotic lung and a mouse model of fibrosis, providing an independently characterised population in which to test whether the embedding captures a shared disease response.
+    % Suggested citation: Tsukui et al. (2020), https://doi.org/10.1038/s41467-020-15647-5
+    \item A direct test would use human samples to identify the change in fibroblast state associated with fibrosis, then ask whether that same change distinguishes affected mice from controls in a held-out cohort. Extending this comparison across cell populations could reveal which components of the human disease response the animal model reproduces and where the responses diverge.
+\end{itemize}
+
+\bibliographystyle{alpha}
+\bibliography{bib}
+\clearpage
+\onecolumn
+
+\appendix
+
+\section{Full model-level UMAP plots}
+\label{app:umaps}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=1.0\textwidth]{figures/saturn umap.png}
+    \caption{UMAP plot for the SATURN baseline.}
+    \label{fig:full-umap1}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=1.0\textwidth]{figures/infonce umap.png}
+    \caption{UMAP plot for InfoNCE.}
+    \label{fig:full-umap2}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=1.0\textwidth]{figures/mmd umap.png}
+    \caption{UMAP plot for MMD-MA.}
+    \label{fig:full-umap3}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=1.0\textwidth]{figures/ot umap.png}
+    \caption{UMAP plot for OT.}
+    \label{fig:full-umap4}
+\end{figure}
+
+\clearpage
+
+\section{Project Timeline}
+\label{app:gantt}
+
+\begin{figure}[htbp]
+    \centering
+    \resizebox{\textwidth}{!}{%
+        \begin{ganttchart}[
+            hgrid,
+            vgrid,
+            y unit chart=0.65cm,
+            title label font=\bfseries,
+            bar label font=\small,
+            group label font=\bfseries\small,
+            milestone label font=\small
+        ]{1}{11}
+
+            \gantttitle{Project Timeline}{11} \\
+            \gantttitlelist{1,...,11}{1} \\
+
+            \ganttgroup{Literature Review}{1}{4} \\
+            \ganttbar{Review existing methods}{1}{3} \\
+            \ganttbar{Identify research gap}{2}{3} \\
+            \ganttbar{Test \& implement related work}{2}{4} \\
+
+            \ganttgroup{Model Development}{4}{7} \\
+            \ganttbar{Prepare data \& environment}{4}{5} \\
+            \ganttbar{Develop models}{5}{7} \\
+
+            \ganttgroup{Evaluation and Writing}{8}{11} \\
+            \ganttbar{Evaluate results}{8}{9} \\
+            \ganttmilestone{Share report scaffold}{9} \\
+            \ganttbar{Write full report}{9}{11} \\
+            \ganttmilestone{Final submission}{11}
+
+        \end{ganttchart}%
+    }
+    \caption{Gantt chart showing the research project timeline.}
+    \label{fig:gantt}
+\end{figure}
+
+\end{document}
