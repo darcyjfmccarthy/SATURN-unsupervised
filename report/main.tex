@@ -64,16 +64,12 @@ An additional avenue of research is ensuring such a model has real biological me
 
 \subsection{Research aims}
 
-This study examines whether biologically meaningful cross-species cell embeddings can be learned without using cell-type labels to define the embedding space. It has three two main aims:
+This study has three aims.
 
 \begin{itemize}
-    \item
-    To determine whether a label-agnostic learning objective can produce cross-species representations comparable to SATURN’s supervised metric-learning baseline;
-    \item 
-    To determine if such a label-agnostic approach can generalise across biological diversity, model scale, and unseen data, and;
-
-    \item
-    To assess how label-agnostic embeddings can be evaluated without relying solely on the cell-type labels as a metric for correctness.
+    \item Determine whether a label-agnostic learning objective can produce cross-species cell embeddings comparable to those learnt by SATURN’s supervised metric-learning baseline.
+    \item Test whether these embeddings generalise across a wider range of species and to unseen cells, and assess how their performance varies with embedding dimension and training duration.
+    \item Assess the embeddings using evidence beyond agreement with cell-type labels.
 \end{itemize}
 
 To investigate these questions, the study retains the pretrained representation and general experimental setting of SATURN while replacing its supervised metric-learning objective with label-agnostic alternatives. This design isolates the effect of the learning objective and enables direct comparison between the resulting representations and the supervised baseline. Representations are evaluated jointly for preservation of broad biological structure and cross-species integration, since species mixing alone may reflect indiscriminate biological collapse.
@@ -437,13 +433,22 @@ The larger embeddings also cost more to train (Figure~\ref{fig:model-compute-sca
     \label{fig:model-compute-scaling}
 \end{figure}
 \subsection{Generalisation to unseen cells}
-InfoNCE showed very little deterioration on held-out cells (Figure~\ref{fig:heldout-accuracy}). Its label-prediction accuracy changed from 81.34\% on training cells to 81.09\% on held-out cells, a decrease of 0.25 percentage points and the smallest average drop among the four methods. Same-label neighbourhood agreement was similarly stable, changing from 74.37\% to 74.13\%. The result was also consistent across species: InfoNCE's largest species-level accuracy drop was 0.44 percentage points, for frog.
+InfoNCE showed very little deterioration on held-out cells (Figure~\ref{fig:heldout-accuracy}). Its label-prediction accuracy changed from 81.34\% on training cells to 81.09\% on held-out cells, a decrease of 0.25 percentage points and the smallest average drop among the four methods. Same-label neighbourhood agreement was similarly stable, changing from 74.37\% to 74.13\%.
 
 \begin{figure}[t]
     \centering
     \includegraphics[width=\textwidth]{figures/extensions/heldout_accuracy.pdf}
     \caption{Training and held-out cell-type prediction accuracy, using a majority vote among 15 training neighbours. Training cells exclude themselves from their reference neighbours. The horizontal axis is enlarged to show the differences; labels give training and held-out percentages respectively.}
     \label{fig:heldout-accuracy}
+\end{figure}
+
+Frog cells showed the largest training-to-test drop for supervised SATURN (Figure~\ref{fig:heldout-by-species}). Its cell-type prediction accuracy fell from 86.1\% on training cells to 83.2\% on held-out cells, a drop of 2.9 percentage points. InfoNCE's frog accuracy fell from 81.66\% to 81.22\%, and its drops across the five species ranged from 0.15 to 0.44 points. SATURN's lead on frog cells narrowed from 4.43 points on training cells to 1.97 on held-out cells.
+
+\begin{figure}[t]
+    \centering
+    \includegraphics[width=\textwidth]{figures/extensions/heldout_by_species.pdf}
+    \caption{Change in cell-type prediction accuracy from training to held-out cells, by species and method. Values are in percentage points. Counts beneath each species give the number of held-out cells.}
+    \label{fig:heldout-by-species}
 \end{figure}
 
 This consistency occurred alongside retained species integration. InfoNCE's held-out cross-species neighbour fraction was 0.1145, close to the supervised baseline's 0.1196. The baseline still achieved higher absolute held-out label accuracy, at 82.82\%, although its decrease from training was larger, at 1.73 percentage points. MMD-MA and optimal transport also retained high held-out accuracy, but their cross-species neighbour fractions were only 0.0291 and 0.0274. Their label scores therefore continued to coexist with much weaker integration.
@@ -575,19 +580,12 @@ The results of the disease-state evaluation were particularly relevant to the is
 \subsection{Implications for model scaling in biology}
 The scaling experiment in this paper shows that additional training and additional capacity have different effects in this setting. Longer fine-tuning improved InfoNCE's integration, while larger embeddings achieved lower contrastive loss without comparable improvements in integration. This suggests that embedding capacity was not the principal constraint within the tested range. For the supervised baseline model, increased capacity strengthened annotation agreement while reducing species mixing. A larger model therefore became more effective at satisfying one evaluation target without improving the broader integration objective. This pattern is consistent with the concern that additional capacity can reinforce the geometry encouraged by supervision, a potential confounder to previously identified scaling issues for similar models (e.g. \cite{BioScaling}).
 
-\subsection{Impacts of supervision detailed on biological representations}
-Struggling to make this section tight whatsoever. This should basically be the peak of the paper now, the payoff to the motivations in section 1; we can show not just that we can avoid annotations, but that using them as supervision seems to prevent us from learning or retaining some pretty important stuff. (Sub?)set of relevant facts:
-\begin{itemize}
-    \item A representation can recover recognised cell identities while making important differences within those identities less accessible.
-    \item The cancer comparison provides the clearest example: pretraining achieved 94.88\% balanced accuracy, InfoNCE retained 94.96\%, and supervised SATURN fell to 83.75\%. The distinction was already present before fine-tuning; the principal advantage of InfoNCE was preserving it through alignment.
-    \item The skin and lung experiments showed the same direction of effect, with InfoNCE remaining closer to pretraining in every population. Preservation was incomplete, particularly in RDEB keratinocytes, but its 8.1-point decline was smaller than the supervised baseline's 16.1-point decline.
-    \item This pattern is consistent with the supervised objective treating cells sharing an annotation as positive examples despite differences in disease state \cite{SATURN}. Encouraging their similarity supplies no explicit requirement to preserve those state differences, although it does not require them to disappear.
-    \item This limitation does not require the cell-type annotations to be incorrect. Healthy and diseased cells may correctly share a cellular identity while differing in biologically important ways that the training taxonomy does not describe.
-    \item Transfer to unseen cancer patients, with both states represented within each patient and a common assay selected, strengthens the evidence beyond the donor-overlapping skin and lung comparisons. Residual technical and population differences nevertheless remain possible contributors to condition prediction.
-    \item The comparison does not isolate labels as the sole cause, because the objectives also differ in positive-pair construction and topology-preservation losses. Lower nearest-neighbour prediction scores establish reduced accessibility under this readout, rather than proving that all disease information has disappeared.
-    \item The central implication is therefore that removing cell-type supervision can preserve useful biological variation that supervised refinement weakens. In these experiments, label-agnostic alignment offered a benefit beyond matching supervised integration: it retained distinctions that the supplied cell-type labels did not require the model to preserve.
-    \item InfoNCE retained much of the disease-associated variation present before alignment, including the distinction between malignant and adjacent-normal progenitors in held-out patients. Each disease comparison was made within one species, leaving open whether a change identified in one species is recognisable in another.
-\end{itemize}
+\subsection{Cell-type supervision and disease-state preservation}
+In the colorectal cancer experiment, supervised fine-tuning made malignant cells harder to distinguish from adjacent-normal cells carrying the same intestinal-progenitor annotation. Across six held-out patients, the nearest-neighbour predictor's mean balanced accuracy fell from 94.88\% in the shared pretrained representation to 83.75\% after supervised SATURN fine-tuning. InfoNCE preserved the pretrained distinction, scoring 94.96\% (Table~\ref{tab:disease-cancer-holdout}). In the five-species InfoNCE embedding, adjacent-normal study cells partly overlapped with human and mouse atlas progenitors while the main malignant population remained distinct (Figure~\ref{fig:disease-cancer-context}).
+
+The skin and lung experiments showed the same pattern. InfoNCE retained more of the pretrained signal in all four populations (Table~\ref{tab:disease-cell-holdout}). For RDEB keratinocytes, balanced accuracy fell by 8.1 percentage points with InfoNCE and by 16.1 points with supervised fine-tuning. In these experiments, donors contributed cells to both splits, so donor-associated variation could have contributed to prediction. The cancer experiment provides a stronger test of generalisation, with both conditions sampled in each held-out patient using the same assay.
+
+SATURN uses cell-type annotations to select training triplets \cite{SATURN}. Its objective encourages agreement at the level of cell identity and gives no explicit weight to disease-associated differences within that identity. Positive-pair construction and topology-preservation losses also differ between the objectives and could contribute to the gap in nearest-neighbour accuracy. A cell-type label can correctly identify a population and still be too coarse to define the geometry needed to study disease within it. A representation intended to compare disease across species must bring corresponding populations together while keeping the disease-associated differences within them accessible.
 
 \subsection{Limitations}
 The primarily limitation of this study is the fact it has only learnt a small slice of possible biology. The study only evaluated learning across five vertebrate species, and the findings therefore do not establish performance on more evolutionary distant organisms, larger species collections, unseen organisms, or datasets with substantially different compositions. In addition, broad-category evaluation does not cover frog or zebrafish, limiting biological validation of their correspondences.
@@ -635,19 +633,11 @@ A robust evaluation should also distinguish between errors at different levels o
 Finally, as is a limitation noted of the above experiments, repeated training seeds and donor splits should establish whether the findings are reproducible, with uncertainty estimated at the biological-replicate level. Model development and validation should remain separate from final test cohorts so that evaluation continues to measure generalisation.
 
 \subsubsection{Applications}
-If the learned correspondences can be externally validated, label-agnostic representations may be useful in settings where detailed cell-type annotations are incomplete, inconsistent or unavailable. A model trained across well-studied species could provide candidate relationships for cells from a newly sequenced organism without requiring its annotations to be harmonised with an existing taxonomy. These relationships could support annotation transfer, although transferred labels should be treated as hypotheses rather than definitive classifications.
+Frozen-model inference could be used to add cells to an existing reference without retraining. The held-out experiment demonstrated this within the input atlases. Testing on independently collected data would establish whether the mapping remains reliable across studies. A model trained with data from a poorly annotated or newly sequenced species could also propose correspondences with better characterised reference populations without requiring a common annotation vocabulary. These correspondences could guide annotation transfer and provide hypotheses for biological validation.
 
 The representation may also support the identification of conserved and divergent cellular programmes. Regions that align strongly across species may indicate broadly conserved functions, while populations that remain separated despite effective integration elsewhere may represent species-specific specialisation or genuinely unmatched cell states. Importantly, this use would require methods capable of distinguishing meaningful biological divergence from failures of the alignment model.
 
-More broadly, label-agnostic representation learning may allow cross-species analysis to move away from requiring every dataset to conform to a single fixed cell-type vocabulary. The present study provides evidence that this direction is feasible, but its practical value will depend on whether reliable pseudo-correspondences can be extended beyond closely related species and validated using independent biological evidence.
-
-\begin{itemize}
-    \item Frozen-model inference could support adding cells to an existing reference without repeating the full training process. The held-out results establish this capability within the input atlases, providing a basis for testing reference mapping across independently collected studies.
-    \item Models incorporating poorly annotated datasets or additional species could provide candidate cellular correspondences without requiring every population to share a harmonised annotation vocabulary. These relationships could guide annotation transfer and biological investigation, with transferred labels treated as hypotheses requiring validation.
-    \item Pulmonary fibrosis offers a starting point for cross-species disease comparison. CTHRC1-expressing fibroblasts have been identified in both human fibrotic lung and a mouse model of fibrosis, providing an independently characterised population in which to test whether the embedding captures a shared disease response.
-    % Suggested citation: Tsukui et al. (2020), https://doi.org/10.1038/s41467-020-15647-5
-    \item A direct test would use human samples to identify the change in fibroblast state associated with fibrosis, then ask whether that same change distinguishes affected mice from controls in a held-out cohort. Extending this comparison across cell populations could reveal which components of the human disease response the animal model reproduces and where the responses diverge.
-\end{itemize}
+Pulmonary fibrosis offers a test of whether a disease response identified in one species can be recognised in another. Tsukui et al. identified fibroblasts expressing \textit{CTHRC1} in human fibrotic lungs and fibroblasts expressing \textit{Cthrc1} in a mouse model of fibrosis \cite{Tsukui2020}. A direct test would use human samples to identify the change in fibroblast state associated with fibrosis, then ask whether the same change distinguishes affected mice from controls in a held-out cohort. Extending the comparison across cell populations could identify which parts of the human disease response the mouse model reproduces and where the responses diverge.
 
 \bibliographystyle{alpha}
 \bibliography{bib}
